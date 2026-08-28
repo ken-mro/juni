@@ -1,0 +1,2029 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>十二 JŪNI</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230a0d1e'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23ffb454'>十</text></svg>">
+<style>
+/* ============================================================
+   調整用定数（レイアウト系）— CSSカスタムプロパティ
+   ゲームプレイ系の数値は <script> 先頭の CONFIG にある
+   ============================================================ */
+:root {
+  /* 縦配分: HUD(固定) + フィールド(残り全部) + キーパッド(固定) */
+  --hud-h: 44px;              /* HUDの高さ */
+  --pad-h: min(34dvh, 320px); /* キーパッド全体の高さ(親指の可動域に収める) */
+  --pad-gap: 6px;             /* キー間の隙間 */
+  --pad-pad: 8px;             /* キーパッド外周の余白 */
+  --pad-side: clamp(24px, 9vw, 56px); /* キーパッド左右の空き(端のキーのフリック用) */
+
+  /* パレット: 夜空の紺 × 大気圏で燃える隕石の燠(おき)色 */
+  --bg-deep:   #0a0d1e;  /* 夜空・最深部 */
+  --bg-field:  #131a38;  /* フィールド下端の淡い紺 */
+  --key-face:  #1b2244;  /* キーの面 */
+  --key-edge:  #2c3663;  /* キーの縁 */
+  --text:      #e9e4d6;  /* 星明かりの生成り色 */
+  --dim:       #667099;  /* 非活性・補助テキスト */
+  --ember:     #ffb454;  /* 燠色アクセント(次に打つ文字・危険ライン) */
+
+  --font-display: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --font-ui: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100dvh;               /* 100vhはモバイルのアドレスバーで破綻する */
+  overflow: hidden;
+  touch-action: none;           /* 画面の引っ張り・ダブルタップズームを殺す */
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+#app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- HUD ---- */
+#hud {
+  flex: none;
+  height: calc(var(--hud-h) + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 10px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 2.5vw, 18px);
+  border-bottom: 1px solid #1d2447;
+}
+#hud .wordmark {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 0.25em;
+  font-weight: 600;
+  white-space: nowrap; /* 狭い端末で「十二」が縦積みにならないように */
+  flex: none;
+}
+@media (max-width: 380px) {
+  #hud .wordmark small { display: none; } /* 狭い端末ではJŪNIを省く */
+}
+#hud-mode {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--ember);
+  border: 1px solid var(--ember);
+  border-radius: 8px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+#hud-mode.hidden { display: none; }
+#hud .wordmark small {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.35em;
+  color: var(--dim);
+  margin-left: 6px;
+  vertical-align: 2px;
+}
+#hud .stats {
+  margin-left: auto;
+  display: flex;
+  gap: clamp(6px, 2vw, 16px);
+  font-variant-numeric: tabular-nums;
+}
+#hud .stat { text-align: right; }
+#hud .stat .label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+}
+#hud .stat .value { font-size: 15px; line-height: 1.2; }
+#hud .stat .value.lives { color: var(--ember); letter-spacing: 2px; }
+
+/* ---- フィールド (canvas) ---- */
+#field {
+  flex: 1 1 auto;
+  min-height: 0;      /* flex子のcanvasがはみ出さないために必須 */
+  position: relative;
+}
+#cv {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---- キーパッド (DOM) ---- */
+#pad {
+  flex: none;
+  height: calc(var(--pad-h) + env(safe-area-inset-bottom));
+  padding: var(--pad-pad) calc(var(--pad-pad) + var(--pad-side))
+           calc(var(--pad-pad) + env(safe-area-inset-bottom))
+           calc(var(--pad-pad) + var(--pad-side));
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: var(--pad-gap);
+  background: linear-gradient(#0d1128, #0a0d1e);
+  border-top: 1px solid #1d2447;
+}
+.key {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--key-face);
+  border: 1px solid var(--key-edge);
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: clamp(20px, 3.6dvh, 28px);
+  color: var(--text);
+  touch-action: none;
+}
+
+/* 次に打つキーのヒント: キーが光り、フリック方向の矢印が出る */
+.key.hint {
+  border-color: var(--ember);
+  box-shadow: 0 0 12px rgba(255, 180, 84, 0.35);
+}
+.hint-mark {
+  position: absolute;
+  display: none;
+  color: var(--ember);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+.key.hint .hint-mark { display: block; }
+.hint-mark.u { top: 3px; left: 50%; transform: translateX(-50%); }
+.hint-mark.d { bottom: 3px; left: 50%; transform: translateX(-50%); }
+.hint-mark.l { left: 5px; top: 50%; transform: translateY(-50%); }
+.hint-mark.r { right: 5px; top: 50%; transform: translateY(-50%); }
+.key.sub { font-size: clamp(14px, 2.4dvh, 19px); color: var(--dim); }
+.key.pressed,
+.key:active {
+  background: var(--key-edge);
+  border-color: var(--ember);
+}
+
+/* ---- フリックガイド (押下中に5方向の候補を表示) ---- */
+.guide {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+.guide .cell {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #323d70;
+  border: 1px solid #47549b;
+  border-radius: 8px;
+  font-size: 17px;
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.guide .cell.sub { font-size: 10px; }
+.guide .cell.on {
+  background: var(--ember);
+  border-color: var(--ember);
+  color: #0a0d1e;
+}
+
+/* ---- 入力チップ: 直前に確定した入力を小さく表示 ---- */
+#chip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 8px;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: var(--dim);
+  pointer-events: none;
+  transition: color 0.3s;
+}
+#chip.miss { color: #ff6d5a; transition: none; }
+
+/* ---- オーバーレイ(スタート・ゲームオーバー・設定) ---- */
+#overlay,
+#settings,
+#start,
+#pause {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 13, 30, 0.78);
+}
+#overlay.hidden,
+#settings.hidden,
+#start.hidden,
+#pause.hidden { display: none; }
+#overlay .panel,
+#settings .panel,
+#start .panel,
+#pause .panel {
+  width: min(82vw, 340px);
+  max-height: 88dvh;
+  overflow-y: auto;
+  padding: 24px 24px 22px;
+  background: #10142b;
+  border: 1px solid var(--key-edge);
+  border-radius: 14px;
+  text-align: center;
+}
+#overlay .go-title,
+#settings .go-title,
+#pause .go-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 0.3em;
+  margin-bottom: 20px;
+}
+#overlay .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 2px;
+  font-size: 14px;
+  color: var(--dim);
+  border-bottom: 1px solid #1d2447;
+}
+#overlay .row b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+#overlay .badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--ember);
+  color: #0a0d1e;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+#overlay .badge.hidden { display: none; }
+#overlay .sec-title,
+#start .sec-title {
+  margin-top: 18px;
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: var(--dim);
+  border-bottom: 1px solid #1d2447;
+  padding-bottom: 5px;
+}
+.rowgrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+.rowgrid .cell,
+.dircross .cell {
+  background: #171d3d;
+  border-radius: 7px;
+  padding: 6px 0 5px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.rowgrid .cell b,
+.dircross .cell b {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cell.warn b { color: var(--ember); }
+.cell.bad b { color: #ff6d5a; }
+.cell.na b { color: var(--dim); }
+.cell b i { font-style: normal; font-size: 10px; margin-left: 1px; }
+.cell i.up { color: #8fd98f; }
+.cell i.down { color: #ff6d5a; }
+.dircross {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 72%;
+  margin: 8px auto 0;
+}
+.dircross .blank { visibility: hidden; }
+
+/* ---- モード選択タブ(スタート画面・リザルト画面) ---- */
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.mode-tab {
+  flex: 1;
+  padding: 9px 0;
+  border: 1px solid var(--key-edge);
+  border-radius: 9px;
+  background: none;
+  color: var(--dim);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+.mode-tab.active {
+  background: var(--key-edge);
+  border-color: var(--ember);
+  color: var(--text);
+}
+.mode-desc {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--dim);
+  min-height: 1.7em; /* 説明なしのモードでも高さが跳ねない最小限 */
+}
+
+.ghost {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px 0;
+  border: 1px solid var(--key-edge);
+  border-radius: 10px;
+  background: none;
+  color: var(--dim);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+}
+
+/* 三次的な操作(設定など)は控えめなリンク風にする */
+.linklike {
+  margin-top: 12px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+#go-retry,
+#st-close,
+#btn-start,
+#btn-resume {
+  margin-top: 22px;
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--ember);
+  color: #0a0d1e;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+}
+#btn-start { margin-top: 12px; } /* モード選択の直下に置く */
+
+/* ---- 設定・一時停止ボタン(フィールド右下) ---- */
+#btn-settings,
+#btn-pause {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(27, 34, 68, 0.75);
+  border: 1px solid var(--key-edge);
+  color: var(--dim);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#btn-pause { right: 60px; }
+
+/* ---- スタート画面 ---- */
+#start .start-title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  letter-spacing: 0.3em;
+  font-weight: 600;
+}
+#start .start-title small {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.5em;
+  color: var(--dim);
+  margin-top: 6px;
+}
+#start .start-copy {
+  margin: 16px 0 2px;
+  font-size: 13px;
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+#start .start-rules {
+  text-align: left;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.9;
+  padding-left: 1.3em;
+  margin: 8px 0 0;
+}
+.toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 13px 2px;
+  border-bottom: 1px solid #1d2447;
+  font-size: 14px;
+  color: var(--text);
+}
+.toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #2c3663;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.toggle input:checked { background: var(--ember); }
+.toggle input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e9e4d6;
+  transition: left 0.15s;
+}
+.toggle input:checked::after { left: 22px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <span class="wordmark">十二<small>JŪNI</small></span>
+    <span id="hud-mode" class="hidden">のんびり</span>
+    <div class="stats">
+      <div class="stat"><span class="label">SCORE</span><span class="value" id="hud-score">0</span></div>
+      <div class="stat"><span class="label">COMBO</span><span class="value" id="hud-combo">0</span></div>
+      <div class="stat"><span class="label">LEVEL</span><span class="value" id="hud-level">1</span></div>
+      <div class="stat"><span class="label">LIFE</span><span class="value lives" id="hud-lives">◆◆◆</span></div>
+    </div>
+  </header>
+  <div id="field">
+    <canvas id="cv"></canvas>
+    <div id="chip"></div>
+    <button id="btn-pause" aria-label="一時停止"><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.2" y="1.5" width="3.4" height="11" rx="1.4" fill="currentColor"/><rect x="8.4" y="1.5" width="3.4" height="11" rx="1.4" fill="currentColor"/></svg></button>
+    <button id="btn-settings" aria-label="設定">⚙&#xFE0E;</button>
+  </div>
+  <div id="pad"></div>
+</div>
+
+<div id="overlay" class="hidden">
+  <div class="panel">
+    <div class="go-title">GAME OVER</div>
+    <div class="row"><span>スコア <em id="go-newbest" class="badge hidden">記録更新</em></span><b id="go-score">0</b></div>
+    <div class="row"><span>ハイスコア</span><b id="go-best">0</b></div>
+    <div class="row"><span>最大コンボ</span><b id="go-combo">0</b></div>
+    <div class="row"><span>撃破</span><b id="go-destroyed">0</b></div>
+    <div class="row"><span>到達レベル</span><b id="go-level">1</b></div>
+    <div class="sec-title">行別 正答率（↑↓ 前回比）</div>
+    <div id="go-rows" class="rowgrid"></div>
+    <div class="sec-title">方向別 ミス率</div>
+    <div id="go-dirs" class="dircross"></div>
+    <button id="go-retry">もう一度</button>
+  </div>
+</div>
+
+<div id="start">
+  <div class="panel">
+    <div class="start-title">十二<small>JŪNI</small></div>
+    <p class="start-copy">フリック入力で地球を救え！</p>
+    <div class="sec-title">あそびかた</div>
+    <ul class="start-rules">
+      <li>隕石のことばを入力して破壊</li>
+      <li>隕石が下のラインに3回落ちると終了</li>
+    </ul>
+    <div class="sec-title">モード</div>
+    <div class="mode-tabs">
+      <button class="mode-tab" data-mode="normal">ノーマル</button>
+      <button class="mode-tab" data-mode="easy">のんびり</button>
+    </div>
+    <p class="mode-desc"></p>
+    <button id="btn-start">スタート</button>
+    <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
+  </div>
+</div>
+
+<div id="pause" class="hidden">
+  <div class="panel">
+    <div class="go-title">一時停止</div>
+    <button id="btn-resume">再開</button>
+    <button id="btn-pause-retry" class="ghost">やり直す</button>
+  </div>
+</div>
+
+<div id="settings" class="hidden">
+  <div class="panel">
+    <div class="go-title">設定</div>
+    <label class="toggle"><span>入力ガイド</span><input type="checkbox" id="st-guide" checked></label>
+    <label class="toggle"><span>次のキーのヒント</span><input type="checkbox" id="st-hint" checked></label>
+    <label class="toggle"><span>効果音</span><input type="checkbox" id="st-sfx" checked></label>
+    <label class="toggle"><span>BGM</span><input type="checkbox" id="st-bgm" checked></label>
+    <button id="st-close">閉じる</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   調整用定数（ゲームプレイ系）
+   実機で触って調整する数値はすべてここに置く
+   ============================================================ */
+const CONFIG = {
+  FLICK_THRESHOLD: 25,  // フリック方向確定の移動量しきい値(px)。未満は中央=あ段
+  MAX_DPR: 2,           // canvasのdevicePixelRatio上限(高DPI端末の負荷対策)
+  STAR_COUNT: 70,       // 背景の星の数
+  DANGER_LINE_H: 2,     // フィールド下端の危険ラインの太さ(px)
+  GUIDE_CELL: 34,       // フリックガイドの1マスの大きさ(px)
+  GUIDE_GAP: 3,         // ガイドのマス間の隙間(px)
+  GUIDE_LIFT: 10,       // ガイドをキー上端からどれだけ浮かせるか(px)
+
+  FALL_SPEED: 28,       // 隕石の基本落下速度(px/秒)
+  FALL_SPEED_VAR: 0.25, // 落下速度の個体差(±この割合)
+  SPAWN_INTERVAL: 3.0,  // 隕石の出現間隔(秒)
+  METEOR_MAX: 5,        // 同時に存在できる隕石の上限
+  METEOR_FONT: 20,      // 隕石の文字サイズ(px)
+  METEOR_RY: 26,        // 隕石の縦半径(px)。横半径は文字数から決まる
+  HIT_PARTICLES: 8,     // 1文字消したときの破片の数
+  BOOM_PARTICLES: 26,   // 破壊時の破片の数
+
+  SOUND_VOLUME: 0.5,    // 効果音の全体音量(0で無音)
+  BGM_VOLUME: 0.25,     // BGMの全体音量(0で無音)。効果音とは独立に調整する
+  BGM_BPM: 112,         // BGMの基本テンポ。レベルに応じてわずかに上がる
+  BGM_FADE_OUT: 1.5,    // ゲームオーバー時にBGMをフェードアウトさせる秒数
+  BGM_LEVEL_CAP: 12,    // BGMのレベル追従の上限(これ以上のレベルでは変化しない)
+
+  LIVES: 3,             // 開始時のライフ
+  SCORE_PER_ACTION: 10, // 破壊時: actions × この値 × コンボ倍率
+  COMBO_STEP: 10,       // この連鎖数ごとにコンボ倍率が上がる
+  COMBO_BONUS: 0.5,     // 1段階あたりの倍率上昇
+  COMBO_MULT_MAX: 3.0,  // コンボ倍率の上限
+  SPAWN_RETRY: 30,      // 先頭文字が重複しない単語を探す試行回数
+  RECENT_WORDS: 10,     // 直近この数の単語は再出題しない
+
+  /* レベル進行。難易度の主軸は行の解放で、速度・出現間隔は補助 */
+  LEVEL_KILLS: [8, 18, 30, 44],                  // L2..L5に上がるのに必要な累計撃破数
+  LEVEL_SPEED: [1.0, 1.15, 1.3, 1.5, 1.7],       // レベル別の落下速度係数
+  LEVEL_SPAWN: [1.0, 0.93, 0.86, 0.79, 0.73],    // レベル別の出現間隔係数
+
+  /* L5到達後のエンドレス進行: 一定撃破数ごとにレベルが上がり続け、
+     そのたびに速度が上がり続ける(速度に上限なし) */
+  ENDLESS_KILLS_PER_LEVEL: 12,   // L6以降、1レベル上がるのに必要な撃破数
+  ENDLESS_SPEED_PER_LEVEL: 0.08, // L6以降、1レベルごとの速度上昇(L5比+8%ずつ)
+  ENDLESS_SPAWN_PER_LEVEL: 0.04, // L6以降、1レベルごとの出現間隔短縮(-4%ずつ)
+  SPAWN_INTERVAL_MIN: 1.2,       // 出現間隔の下限(秒)。これ以上は縮まない
+
+  /* のんびりモード(練習用): ゆっくり・まばら・スコアは控えめ */
+  EASY_SPEED: 0.6,  // 落下速度の係数
+  EASY_SPAWN: 1.5,  // 出現間隔の係数(長くなる)
+  EASY_SCORE: 0.5,  // 獲得スコアの係数
+};
+
+/* 文字種ごとの追加アクション数(タップ回数)。難易度計算の基準 */
+const COST = { dakuten: 1, handakuten: 2, small: 1 };
+
+/* キー配置: 3列×4行。indexは左上から行優先 */
+const KEY_LAYOUT = [
+  "あ", "か", "さ",
+  "た", "な", "は",
+  "ま", "や", "ら",
+  "小゛゜", "わ", "、",
+];
+
+/* フリック方向: index 0=中央 1=左 2=上 3=右 4=下。null は無反応 */
+const DIR_CENTER = 0, DIR_LEFT = 1, DIR_UP = 2, DIR_RIGHT = 3, DIR_DOWN = 4;
+const DIR_LABELS = ["中央", "← 左", "↑ 上", "→ 右", "↓ 下"];
+
+/* 小゛゜キーの中央タップを表すセンチネル(かなと衝突しない値) */
+const MOD = "MOD";
+
+/* キー行 → [中央, 左, 上, 右, 下] のかな */
+const FLICK_MAP = {
+  "あ": ["あ", "い", "う", "え", "お"],
+  "か": ["か", "き", "く", "け", "こ"],
+  "さ": ["さ", "し", "す", "せ", "そ"],
+  "た": ["た", "ち", "つ", "て", "と"],
+  "な": ["な", "に", "ぬ", "ね", "の"],
+  "は": ["は", "ひ", "ふ", "へ", "ほ"],
+  "ま": ["ま", "み", "む", "め", "も"],
+  "や": ["や", "「", "ゆ", "」", "よ"],
+  "ら": ["ら", "り", "る", "れ", "ろ"],
+  "小゛゜": [MOD, null, null, null, null],
+  "わ": ["わ", "を", "ん", "ー", null],
+  "、": ["、", "。", "？", "！", null],
+};
+
+/* キー面の表示がキー行IDと異なるもの */
+const KEY_DISPLAY = { "、": "、。?!" };
+
+/* 小゛゜による変換サイクル: 清音→濁音(→半濁音)→清音 / 清音→小文字→清音 */
+const CYCLES = [
+  "あぁ", "いぃ", "うぅ", "えぇ", "おぉ",
+  "かが", "きぎ", "くぐ", "けげ", "こご",
+  "さざ", "しじ", "すず", "せぜ", "そぞ",
+  "ただ", "ちぢ", "つっづ", "てで", "とど",
+  "はばぱ", "ひびぴ", "ふぶぷ", "へべぺ", "ほぼぽ",
+  "やゃ", "ゆゅ", "よょ",
+];
+const CYCLE_NEXT = {};
+const CHAR_CYCLE = {}; // 文字 → { cycle, i } (サイクル文字列と自分の位置)
+for (const cycle of CYCLES) {
+  for (let i = 0; i < cycle.length; i++) {
+    CYCLE_NEXT[cycle[i]] = cycle[(i + 1) % cycle.length];
+    CHAR_CYCLE[cycle[i]] = { cycle, i };
+  }
+}
+
+/* 1文字を打つのに必要な入力列。例: が→[か,MOD] ぱ→[は,MOD,MOD] ね→[ね] */
+function inputSeq(ch) {
+  const c = CHAR_CYCLE[ch];
+  return c ? [c.cycle[0], ...Array(c.i).fill(MOD)] : [ch];
+}
+
+/* ============================================================
+   単語データ
+   読みだけの文字列。漢字表記を出したい場合のみ「よみ|表記」
+   日常語を軸に、宇宙・天体系を2〜3割
+   ============================================================ */
+const WORDS = [
+  /* あ・か・さ行のみ(清音) */
+  "あさ|朝", "あき|秋", "いけ|池", "いす|椅子", "うし|牛", "えき|駅",
+  "おか|丘", "かい|貝", "かお|顔", "かさ|傘", "きく|菊", "くさ|草",
+  "くうき|空気", "こえ|声", "さか|坂", "しお|塩", "しか|鹿", "すし|寿司",
+  "すいか|西瓜", "せかい|世界", "そこ|底", "かせき|化石",
+  "すいせい|彗星", "こうせい|恒星", "えいせい|衛星",
+  "いえ|家", "うえ|上", "あせ|汗", "けさ|今朝", "きおく|記憶",
+  "くうこう|空港", "しあい|試合",
+  /* +た・な・は行 */
+  "ねこ|猫", "いぬ|犬", "つき|月", "ほし|星", "たね|種", "なつ|夏",
+  "はな|花", "ふね|船", "にく|肉", "はし|橋", "ひと|人", "ふく|服",
+  "とけい|時計", "つくえ|机", "なし|梨", "はち|蜂", "たこ|蛸", "たけ|竹",
+  "ちち|父", "はは|母", "うた|歌", "いと|糸", "きのこ|茸", "たき|滝",
+  "てつ|鉄", "ほのお|炎",
+  "はこ|箱", "ほね|骨", "ひふ|皮膚", "へそ|臍", "つち|土", "ぬの|布",
+  "はと|鳩", "あかつき|暁", "ほくと|北斗",
+  /* +ま・や・ら・わ行 */
+  "そら|空", "やま|山", "ゆき|雪", "よる|夜", "もり|森", "むし|虫",
+  "まち|町", "みせ|店", "もも|桃", "やね|屋根", "ゆめ|夢", "りす|栗鼠",
+  "れきし|歴史", "わに|鰐", "ほん|本", "みかん|蜜柑", "れもん|檸檬",
+  "らーめん", "こーひー|珈琲", "うみ|海", "あめ|雨", "はれ|晴れ",
+  "かみなり|雷", "さくら|桜", "みらい|未来", "ふゆ|冬",
+  "たいよう|太陽", "わくせい|惑星", "せいうん|星雲", "つきよ|月夜",
+  "はる|春", "いろ|色", "ふろ|風呂", "こころ|心", "くるま|車",
+  "まめ|豆", "むね|胸", "ゆか|床", "りく|陸", "わた|綿", "ぬま|沼",
+  "きぬ|絹", "ほんをよむ|本を読む", "へいわ|平和",
+  "こうねん|光年", "あさやけ|朝焼け", "ゆうやけ|夕焼け", "てんたい|天体",
+  /* 濁音・半濁音 */
+  "かぜ|風", "みず|水", "にじ|虹", "たまご|卵", "めがね|眼鏡",
+  "でんわ|電話", "てがみ|手紙", "ともだち|友達", "りんご|林檎",
+  "ぱん", "ぺんぎん", "ぷりん", "えんぴつ|鉛筆", "さんぽ|散歩",
+  "ぎんが|銀河", "せいざ|星座", "いんせき|隕石", "ながれぼし|流れ星",
+  "ほしぞら|星空", "どせい|土星", "もくせい|木星", "きんせい|金星",
+  "かせい|火星", "みかづき|三日月",
+  "かべ|壁", "へび|蛇", "ゆび|指", "そば|蕎麦", "ことば|言葉", "たべもの|食べ物",
+  "ばら|薔薇", "ぶどう|葡萄", "はなぢ|鼻血", "ちぢむ|縮む",
+  "かげ|影", "げんき|元気", "むぎ|麦", "もぐら|土竜", "ひざ|膝",
+  "わざ|技", "じかん|時間", "もじ|文字", "ひつじ|羊", "ちず|地図",
+  "ねずみ|鼠", "なぜ|何故", "ぜんぶ|全部", "ぞう|象", "からだ|体",
+  "くだもの|果物", "こづつみ|小包", "どうろ|道路", "ぼうし|帽子",
+  "かんぱい|乾杯", "ぴあの|ピアノ", "ぺーじ|ページ", "たんぽぽ|蒲公英",
+  "そらをとぶ|空を飛ぶ", "よぞら|夜空", "すばる|昴",
+  "しんげつ|新月", "まんげつ|満月", "おおぐまざ|大熊座", "ほしくず|星屑",
+  /* 小文字・拗音 */
+  "きって|切手", "きっぷ|切符", "しゃしん|写真", "でんしゃ|電車",
+  "きょう|今日", "きゅうり|胡瓜", "ちょうちょ|蝶々", "らっこ",
+  "ろけっと", "うちゅう|宇宙", "りゅうせいぐん|流星群",
+  "ほっきょくせい|北極星", "うちゅうせん|宇宙船",
+  "しょうゆ|醤油", "ちゃわん|茶碗", "りょこう|旅行", "きんぎょ|金魚",
+  "びょういん|病院", "じゃがいも|じゃが芋", "にんじゃ|忍者",
+  "ぎゅうにゅう|牛乳", "しっぽ|尻尾", "ちきゅう|地球",
+  "りゅうせい|流星", "じゅうりょく|重力",
+  "そふぁー|ソファー", "ぱーてぃー|パーティー", "ちぇろ|チェロ",
+  "ふぉーく|フォーク", "うぉっち|ウォッチ",
+];
+
+/* ============================================================
+   語彙モジュール: 正規化・難易度解析・バリデーション
+   ============================================================ */
+const DAKUTEN_BASE = {
+  "が": "か", "ぎ": "き", "ぐ": "く", "げ": "け", "ご": "こ",
+  "ざ": "さ", "じ": "し", "ず": "す", "ぜ": "せ", "ぞ": "そ",
+  "だ": "た", "ぢ": "ち", "づ": "つ", "で": "て", "ど": "と",
+  "ば": "は", "び": "ひ", "ぶ": "ふ", "べ": "へ", "ぼ": "ほ",
+  "ゔ": "う",
+};
+const HANDAKUTEN_BASE = {
+  "ぱ": "は", "ぴ": "ひ", "ぷ": "ふ", "ぺ": "へ", "ぽ": "ほ",
+};
+const SMALL_BASE = {
+  "ぁ": "あ", "ぃ": "い", "ぅ": "う", "ぇ": "え", "ぉ": "お",
+  "っ": "つ", "ゃ": "や", "ゅ": "ゆ", "ょ": "よ", "ゎ": "わ",
+};
+
+/* 単語には使えないが入力は可能な記号(かな→行の表から除外する) */
+const NON_WORD_CHARS = new Set([..."「」、。？！"]);
+
+/* かな(清音・ー) → 所属するキー行。FLICK_MAP から導出 */
+const KANA_ROW = {};
+for (const row of KEY_LAYOUT) {
+  for (const kana of FLICK_MAP[row]) {
+    if (kana && kana !== MOD && !NON_WORD_CHARS.has(kana)) KANA_ROW[kana] = row;
+  }
+}
+
+/* が→か、ぱ→は、ゃ→や の正規化 */
+function toBase(ch) {
+  return DAKUTEN_BASE[ch] ?? HANDAKUTEN_BASE[ch] ?? SMALL_BASE[ch] ?? ch;
+}
+
+/* 所属する行("か" など)。かなでなければ null */
+function rowOf(base) {
+  return KANA_ROW[base] ?? null;
+}
+
+/* 清音0、濁音1、半濁音2、小文字1 の追加アクション数 */
+function extraCost(ch) {
+  if (ch in DAKUTEN_BASE) return COST.dakuten;
+  if (ch in HANDAKUTEN_BASE) return COST.handakuten;
+  if (ch in SMALL_BASE) return COST.small;
+  return 0;
+}
+
+/* 濁音/半濁音/小文字/長音のビットフラグ */
+const FLAG = { DAKUTEN: 1, HANDAKUTEN: 2, SMALL: 4, CHOUON: 8 };
+
+/* 読み → { actions, rows, flags, len }
+   actions = 実際のフリック回数の合計。難易度の基準はこの値(文字数ではない) */
+function analyze(kana) {
+  let actions = 0;
+  let flags = 0;
+  const rows = new Set();
+  for (const ch of kana) {
+    rows.add(rowOf(toBase(ch)));
+    actions += 1 + extraCost(ch);
+    if (ch in DAKUTEN_BASE) flags |= FLAG.DAKUTEN;
+    if (ch in HANDAKUTEN_BASE) flags |= FLAG.HANDAKUTEN;
+    if (ch in SMALL_BASE) flags |= FLAG.SMALL;
+    if (ch === "ー") flags |= FLAG.CHOUON;
+  }
+  return { actions, rows: [...rows], flags, len: [...kana].length };
+}
+
+/* 読みの検査。問題なければ null、あれば理由を返す */
+function validateReading(reading) {
+  if (!reading) return "空文字";
+  if (/[ァ-ヺ]/.test(reading)) return "カタカナを含む";
+  if (/[一-鿿々]/.test(reading)) return "漢字を含む";
+  if (reading.includes(" ")) return "半角スペースを含む";
+  for (const ch of reading) {
+    if (rowOf(toBase(ch)) === null) return `想定外の文字「${ch}」`;
+  }
+  return null;
+}
+
+/* 起動時に全単語を検査・解析。問題のある語は警告してスキップ */
+const LEXICON = [];
+for (const raw of WORDS) {
+  const parts = raw.split("|");
+  const reason = parts.length > 2 ? "「|」が2つ以上ある" : validateReading(parts[0]);
+  if (reason) {
+    console.warn(`単語をスキップ: "${raw}" — ${reason}`);
+    continue;
+  }
+  LEXICON.push({ reading: parts[0], display: parts[1] ?? null, ...analyze(parts[0]) });
+}
+console.log(`[語彙] ${LEXICON.length}/${WORDS.length} 語を読み込み`);
+
+/* ============================================================
+   レベル定義: 解放される行と許可フラグ
+   長音(ー)はわ行の解放と同時に出るため常に許可
+   ============================================================ */
+const ALL_ROWS = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ"];
+const LEVELS = [
+  { rows: ["あ", "か", "さ"], flags: FLAG.CHOUON, label: "あ・か・さ" },
+  { rows: ["あ", "か", "さ", "た", "な", "は"], flags: FLAG.CHOUON, label: "＋た・な・は" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "＋ま・や・ら・わ" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN, label: "濁音・半濁音" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN | FLAG.SMALL, label: "小文字・拗音" },
+];
+
+/* レベルごとの出題プールを起動時に確定しておく */
+const LEVEL_POOLS = LEVELS.map((def) => LEXICON.filter((w) =>
+  w.rows.every((r) => def.rows.includes(r)) && (w.flags & ~def.flags) === 0));
+console.log(`[語彙] レベル別プール: ${LEVEL_POOLS.map((p) => p.length).join(" / ")}`);
+
+/* ---- キーパッド生成 (DOM) ---- */
+const padEl = document.getElementById("pad");
+const keyEls = {}; // 行ID → キー要素(ヒント表示で使う)
+for (const row of KEY_LAYOUT) {
+  const key = document.createElement("div");
+  const label = KEY_DISPLAY[row] ?? row;
+  key.className = "key" + (label.length > 1 ? " sub" : "");
+  key.dataset.row = row;
+  key.textContent = label;
+  const mark = document.createElement("span");
+  mark.className = "hint-mark";
+  key.appendChild(mark);
+  padEl.appendChild(key);
+  keyEls[row] = key;
+}
+
+/* ---- フィールド canvas: リサイズ追従と静的背景 ---- */
+const fieldEl = document.getElementById("field");
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let fieldW = 0;
+let fieldH = 0;
+let stars = [];
+
+function resizeCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_DPR);
+  fieldW = fieldEl.clientWidth;
+  fieldH = fieldEl.clientHeight;
+  cv.width = Math.round(fieldW * dpr);
+  cv.height = Math.round(fieldH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  stars = Array.from({ length: CONFIG.STAR_COUNT }, () => ({
+    x: Math.random() * fieldW,
+    y: Math.random() * fieldH,
+    r: Math.random() * 1.3 + 0.3,
+    a: Math.random() * 0.5 + 0.15,
+  }));
+}
+
+new ResizeObserver(resizeCanvas).observe(fieldEl);
+resizeCanvas();
+
+/* ============================================================
+   隕石: 生成・落下・ターゲティング・破壊
+   ============================================================ */
+const METEOR_FONT_STR = `bold ${CONFIG.METEOR_FONT}px "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif`;
+const CHAR_ADVANCE = CONFIG.METEOR_FONT * 1.15; // 1文字ぶんの送り幅
+
+let meteors = [];
+let particles = [];
+let spawnTimer = CONFIG.SPAWN_INTERVAL; // 起動直後に1体出す
+let dangerFlash = 0;
+
+/* 難易度スケール。L1〜L5はテーブル、L6以降はレベルに比例して伸び続ける */
+function speedScale() {
+  const easy = settings.easy ? CONFIG.EASY_SPEED : 1;
+  if (game.level <= 5) return CONFIG.LEVEL_SPEED[game.level - 1] * easy;
+  return CONFIG.LEVEL_SPEED[4] *
+    (1 + (game.level - 5) * CONFIG.ENDLESS_SPEED_PER_LEVEL) * easy;
+}
+function spawnScale() {
+  if (game.level <= 5) return CONFIG.LEVEL_SPAWN[game.level - 1];
+  return Math.max(
+    CONFIG.LEVEL_SPAWN[4] * (1 - (game.level - 5) * CONFIG.ENDLESS_SPAWN_PER_LEVEL),
+    0.01);
+}
+
+/* 次のレベルに必要な累計撃破数。L6以降は一定間隔で無限に続く */
+function killsNeededFor(level) {
+  if (level <= 1) return 0;
+  if (level <= LEVELS.length + 1 && level - 2 < CONFIG.LEVEL_KILLS.length) {
+    return CONFIG.LEVEL_KILLS[level - 2];
+  }
+  return CONFIG.LEVEL_KILLS.at(-1) +
+    (level - LEVELS.length) * CONFIG.ENDLESS_KILLS_PER_LEVEL;
+}
+
+let recentWords = []; // 直近に出題した読み(重複出題の回避用)
+
+/* 現在レベルのプールから単語を選ぶ。
+   優先順: 先頭入力が場と重複しない かつ 直近に出ていない
+   → 先頭のみ重複しない → 完全ランダム(妥協) */
+function pickWord(pool) {
+  const tryPick = (checkRecent) => {
+    for (let i = 0; i < CONFIG.SPAWN_RETRY; i++) {
+      const cand = pool[Math.floor(Math.random() * pool.length)];
+      const first = inputSeq([...cand.reading][0])[0];
+      if (meteors.some((m) => expectedToken(m) === first)) continue;
+      if (checkRecent && recentWords.includes(cand.reading)) continue;
+      return cand;
+    }
+    return null;
+  };
+  return tryPick(true) ?? tryPick(false) ??
+    pool[Math.floor(Math.random() * pool.length)];
+}
+
+function spawnMeteor() {
+  const pool = LEVEL_POOLS[Math.min(game.level, LEVELS.length) - 1];
+  const word = pickWord(pool);
+  recentWords.push(word.reading);
+  recentWords = recentWords.slice(-CONFIG.RECENT_WORDS);
+  const chars = [...word.reading].map((ch) => ({ ch, tokens: inputSeq(ch) }));
+  const rx = Math.max((word.len * CHAR_ADVANCE) / 2 + 14, 40);
+  const ry = CONFIG.METEOR_RY + word.len * 1.5;
+  const margin = rx + 8;
+  const speedJitter = 1 + (Math.random() * 2 - 1) * CONFIG.FALL_SPEED_VAR;
+  meteors.push({
+    word, chars,
+    charIdx: 0,   // 何文字目まで消したか
+    charProg: 0,  // 現在の文字に入力済みのトークン数
+    x: margin + Math.random() * Math.max(fieldW - margin * 2, 1),
+    y: ry + 6, // 画面上部に全体が見える位置から落ち始める
+
+    rx, ry,
+    speed: CONFIG.FALL_SPEED * speedScale() * speedJitter,
+    rot: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() * 2 - 1) * 0.3,
+    /* 岩の輪郭(半径ジッタ)と、ヒビ・クレーターの乱数は生成時に固定 */
+    shape: Array.from({ length: 11 }, () => 0.82 + Math.random() * 0.36),
+    seeds: Array.from({ length: 8 }, () => Math.random()),
+  });
+}
+
+/* いま消しかけの文字の表示形。か→(MOD)→が の途中経過を見せる */
+function displayChar(m, i) {
+  const ch = m.chars[i].ch;
+  if (i !== m.charIdx || m.charProg === 0) return ch;
+  return CHAR_CYCLE[ch].cycle[m.charProg - 1];
+}
+
+function expectedToken(m) {
+  return m.chars[m.charIdx].tokens[m.charProg];
+}
+
+function spawnParticles(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const sp = 40 + Math.random() * 140;
+    particles.push({
+      x, y,
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp - 30,
+      life: 0.5 + Math.random() * 0.4,
+      t: 0,
+      r: 1.5 + Math.random() * 2.5,
+      color: Math.random() < 0.6 ? "#ffb454" : "#e9e4d6",
+    });
+  }
+}
+
+/* ============================================================
+   効果音: Web Audio APIによる合成音(外部ファイルなし)
+   モバイルの制約により、最初のタッチで AudioContext を起こす
+   ============================================================ */
+const SFX = (() => {
+  let ctx = null;
+  let master = null;
+  let muted = false;
+
+  function ensure() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.gain.value = muted ? 0 : CONFIG.SOUND_VOLUME;
+      master.connect(ctx.destination);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+  }
+
+  function tone(freq, dur, { type = "sine", vol = 0.3, slide = 0, delay = 0 } = {}) {
+    if (!ctx) return;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(freq + slide, 30), t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g).connect(master);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+
+  function noise(dur, { vol = 0.4, freq = 800, delay = 0 } = {}) {
+    if (!ctx) return;
+    const t0 = ctx.currentTime + delay;
+    const len = Math.ceil(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(freq, t0);
+    filter.frequency.exponentialRampToValueAtTime(100, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(filter).connect(g).connect(master);
+    src.start(t0);
+  }
+
+  return {
+    ensure,
+    state: () => ctx?.state ?? "none",
+    /* BGMとAudioContextを共有するための参照(二重生成の回避) */
+    context: () => ctx,
+    /* 効果音のミュート(BGMには影響しない) */
+    setMuted(m) {
+      muted = m;
+      if (master) master.gain.value = m ? 0 : CONFIG.SOUND_VOLUME;
+    },
+    /* 正解入力。コンボが乗るほどピッチが上がる */
+    tick(combo) { tone(880 + Math.min(combo, 40) * 12, 0.06, { type: "triangle", vol: 0.18 }); },
+    /* 1文字削れた(ヒビ) */
+    crack() { noise(0.08, { vol: 0.15, freq: 2500 }); tone(320, 0.09, { type: "square", vol: 0.12, slide: 140 }); },
+    /* 隕石破壊 */
+    boom() { noise(0.4, { vol: 0.5, freq: 1200 }); tone(90, 0.35, { vol: 0.5, slide: -50 }); },
+    /* ミス入力 */
+    miss() { tone(140, 0.18, { type: "square", vol: 0.22, slide: -40 }); },
+    /* 隕石着地(ライフ減): 警報の2音+衝撃。
+       低周波のみだとスマホのスピーカーで聞こえないため中域主体にする */
+    land() {
+      tone(660, 0.13, { type: "square", vol: 0.28, slide: -80 });
+      tone(440, 0.22, { type: "square", vol: 0.28, slide: -120, delay: 0.13 });
+      tone(150, 0.45, { vol: 0.55, slide: -80 });
+      noise(0.3, { vol: 0.4, freq: 1100 });
+    },
+    /* レベルアップ: 上昇するアルペジオ */
+    levelUp() {
+      [330, 415, 494, 659].forEach((f, i) =>
+        tone(f, 0.22, { type: "triangle", vol: 0.25, delay: i * 0.09 }));
+    },
+    /* ゲームオーバー: 下降する4音 */
+    gameOver() {
+      [392, 311, 233, 155].forEach((f, i) =>
+        tone(f, 0.34, { type: "triangle", vol: 0.3, delay: 0.25 + i * 0.18 }));
+    },
+  };
+})();
+
+/* ============================================================
+   BGM: Web Audio APIによる地球防衛テーマ(音源ファイルなし・手続き生成)
+   構成: 8分刻みのパルスベース + 軽量ドラム(キック/スネア/ハット)
+       + 鋸波パッドのコード + 疾走するアルペジオ(残響つき)
+   setTimeoutのドリフトを避けるため、AudioContextのcurrentTimeを
+   基準にした先読みスケジューラで正確な時刻に発音を予約する。
+   AudioContextはSFXと共有し、二重生成しない。
+   ============================================================ */
+const BGM = (() => {
+  /* --- 曲定義: Aマイナー 8小節の勇壮な進行 ---
+     Am | F | C | G | Am | F | Dm | E
+     前半は王道の高揚感、後半の Dm→E(和声的短音階)が緊張と使命感を
+     作って Am の頭へ強く戻る。midiノート番号で記述(69 = A4 = 440Hz) */
+  const BARS = [
+    { bass: 33, chord: [57, 60, 64], arp: [57, 60, 64, 69] }, // Am
+    { bass: 29, chord: [53, 57, 60], arp: [53, 57, 60, 65] }, // F
+    { bass: 36, chord: [55, 60, 64], arp: [55, 60, 64, 67] }, // C
+    { bass: 31, chord: [55, 59, 62], arp: [55, 59, 62, 67] }, // G
+    { bass: 33, chord: [57, 60, 64], arp: [57, 60, 64, 69] }, // Am
+    { bass: 29, chord: [53, 57, 60], arp: [53, 57, 60, 65] }, // F
+    { bass: 38, chord: [57, 62, 65], arp: [57, 62, 65, 69] }, // Dm
+    { bass: 40, chord: [56, 59, 64], arp: [56, 59, 64, 68] }, // E
+  ];
+  const BASS_OCT = [0, 0, 12, 0, 0, 12, 0, 12]; // ベース: 8分ごとのオクターブ跳躍
+  const ARP_PAT = [0, 1, 2, 3, 2, 3, 1, 2];     // アルペジオ: 8分ごとに弾くトーン番号
+  const LOOKAHEAD = 1.2; // 何秒先まで発音を予約するか
+  const TICK_MS = 250;   // スケジューラの起床間隔(ms)。精度には影響しない
+
+  const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+  let ac = null;        // SFXと共有するAudioContext
+  let bus = null;       // BGM全体のゲイン(フェードイン/アウト用)
+  let delaySend = null; // アルペジオの残響(ディレイ)への送り口
+  let noiseBuf = null;  // ハット/スネア用の共有ノイズバッファ(毎回作らない)
+  let timer = null;
+  let running = false;
+  let barIdx = 0;
+  let nextBarTime = 0;
+
+  /* レベル追従: 高レベルほど「わずかに」速く・明るく・リズムが密になる。
+     値は小節の境界でしか反映されないため急変しない */
+  function mood() {
+    const lv = Math.min(game.level, CONFIG.BGM_LEVEL_CAP) - 1;
+    return {
+      spb: 60 / (CONFIG.BGM_BPM + lv), // 1拍の秒数。レベルごとにBPM+1
+      cutoff: 1300 + lv * 110,         // パッドのローパス周波数(明るさ)
+      drive: Math.min(lv / 6, 1),      // 追加キック/裏ハットの音量係数(0→1)
+    };
+  }
+
+  /* BGMの出力バスと残響を組み立てる。開始のたびに作り直し、
+     停止時に切り離すことで前回セッションの鳴り残りを持ち込まない */
+  function buildGraph() {
+    bus = ac.createGain();
+    bus.gain.value = 0.0001;
+    bus.connect(ac.destination);
+    const delay = ac.createDelay(1.0);
+    delay.delayTime.value = 0.4; // 付点8分相当。テンポ変化に合わせ毎小節微調整
+    const damp = ac.createBiquadFilter();
+    damp.type = "lowpass";
+    damp.frequency.value = 2400; // 繰り返すほど残響が丸くなる
+    const fb = ac.createGain();
+    fb.gain.value = 0.3;         // 残響のフィードバック量
+    const wet = ac.createGain();
+    wet.gain.value = 0.4;        // 残響の返し量
+    delay.connect(damp);
+    damp.connect(fb).connect(delay); // フィードバックループ
+    delay.connect(wet).connect(bus);
+    delaySend = delay;
+    if (!noiseBuf) {
+      const len = Math.ceil(ac.sampleRate * 0.25);
+      noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+  }
+
+  /* --- 音色: いずれも短命ノードの使い捨て(stop予約済みなのでGCされる) --- */
+
+  /* キック: 正弦波のピッチを一気に落とす定番の合成 */
+  function kick(t, vol) {
+    if (vol < 0.01) return; // 音量ゼロ相当はノード自体を作らない(低レベル時の省負荷)
+    const osc = ac.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.1);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    osc.connect(g).connect(bus);
+    osc.start(t);
+    osc.stop(t + 0.16);
+  }
+
+  /* ノイズ打楽器: ハット(高域・極短)とスネア(中域・短)を兼ねる */
+  function noiseHit(t, vol, freq, dur, type) {
+    if (vol < 0.01) return;
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf;
+    const f = ac.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(bus);
+    src.start(t, Math.random() * 0.1); // 再生開始位置をずらし同一音の繰返し感を消す
+    src.stop(t + dur + 0.02);
+  }
+
+  /* パルスベース: ローパスした鋸波の短い1音 */
+  function bassNote(t, freq, dur, lp) {
+    const osc = ac.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(lp);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  /* アルペジオ: 三角波の短いプラック。残響へも送る */
+  function arpNote(t, freq, vol) {
+    const osc = ac.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    osc.connect(g);
+    g.connect(bus);
+    g.connect(delaySend);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  }
+
+  /* 1小節(4拍)ぶんをまとめて t0 から予約する。小節の長さ(秒)を返す */
+  function scheduleBar(t0) {
+    const { spb, cutoff, drive } = mood();
+    const e8 = spb / 2; // 8分音符の長さ(秒)
+    const bar = BARS[barIdx];
+    const isTurn = barIdx === BARS.length - 1; // E の小節(ループの折り返し)
+    barIdx = (barIdx + 1) % BARS.length;
+
+    /* 残響の長さをテンポに追従させる(付点8分) */
+    delaySend.delayTime.setTargetAtTime(spb * 0.75, t0, 0.5);
+
+    /* コードパッド: デチューンした鋸波2本×3声。小節を支える土台 */
+    const lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = cutoff;
+    lp.Q.value = 0.4;
+    lp.connect(bus);
+    for (const m of bar.chord) {
+      for (const det of [-6, 5]) { // 非対称デチューン: うなりで厚みを作る
+        const osc = ac.createOscillator();
+        osc.type = "sawtooth";
+        osc.frequency.value = midiHz(m);
+        osc.detune.value = det;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.035, t0 + 0.06);
+        g.gain.setValueAtTime(0.035, t0 + spb * 4 - 0.15);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + spb * 4 + 0.25);
+        osc.connect(g).connect(lp);
+        osc.start(t0);
+        osc.stop(t0 + spb * 4 + 0.3);
+      }
+    }
+
+    /* ベース: 8分刻みで走るパルス。オクターブ跳躍が推進力を作る */
+    const blp = ac.createBiquadFilter();
+    blp.type = "lowpass";
+    blp.frequency.value = 500;
+    blp.connect(bus);
+    for (let i = 0; i < 8; i++) {
+      bassNote(t0 + i * e8, midiHz(bar.bass + BASS_OCT[i]), e8 * 0.95, blp);
+    }
+
+    /* アルペジオ: 8分で駆けるリフ。高レベルほど1オクターブ上が混ざり明るくなる */
+    for (let i = 0; i < 8; i++) {
+      const up = Math.random() < drive * 0.35 ? 12 : 0;
+      arpNote(t0 + i * e8, midiHz(bar.arp[ARP_PAT[i]] + 12 + up), 0.055);
+    }
+
+    /* ドラム: キックは1・3拍(レベルが上がると2・4拍が加わり四つ打ちへ)、
+       スネアは2・4拍、ハットは8分裏(レベルが上がると16分が加わる) */
+    for (let b = 0; b < 4; b++) {
+      const t = t0 + b * spb;
+      kick(t, b % 2 === 0 ? 0.42 : 0.42 * drive);
+      if (b % 2 === 1) noiseHit(t, 0.1, 1800, 0.12, "bandpass");        // スネア
+      noiseHit(t + spb * 0.5, 0.045, 6500, 0.04, "highpass");           // 8分裏ハット
+      noiseHit(t + spb * 0.25, 0.03 * drive, 7500, 0.03, "highpass");   // 16分ハット
+      noiseHit(t + spb * 0.75, 0.03 * drive, 7500, 0.03, "highpass");
+    }
+    /* 折り返し小節の終わりに小さなスネアの助走(次のループへの期待感) */
+    if (isTurn) {
+      noiseHit(t0 + spb * 3.5, 0.07, 1800, 0.1, "bandpass");
+      noiseHit(t0 + spb * 3.75, 0.09, 1800, 0.1, "bandpass");
+    }
+    return spb * 4;
+  }
+
+  /* 先読みスケジューラ本体。LOOKAHEAD先までの小節をまとめて予約する */
+  function tick() {
+    const ahead = ac.currentTime + LOOKAHEAD;
+    while (nextBarTime < ahead) nextBarTime += scheduleBar(nextBarTime);
+  }
+
+  /* 開始(再開)。再生中は何もしないので毎タッチ呼んでよい */
+  function start() {
+    if (running || CONFIG.BGM_VOLUME <= 0) return;
+    SFX.ensure(); // ユーザー操作内で呼ばれる前提(自動再生制限)
+    ac = SFX.context();
+    if (!ac) return;
+    if (bus) bus.disconnect(); // 前回セッションの鳴り残りを切り離す
+    buildGraph();
+    running = true;
+    const t = ac.currentTime;
+    bus.gain.setValueAtTime(0.0001, t);
+    bus.gain.exponentialRampToValueAtTime(CONFIG.BGM_VOLUME, t + 0.6);
+    barIdx = 0;
+    nextBarTime = t + 0.05;
+    tick();
+    timer = setInterval(tick, TICK_MS);
+  }
+
+  /* フェードアウトして停止。使い終えたバスは切り離して破棄する */
+  function stop(fade = CONFIG.BGM_FADE_OUT) {
+    if (!running) return;
+    running = false;
+    clearInterval(timer);
+    timer = null;
+    const t = ac.currentTime;
+    bus.gain.cancelScheduledValues(t);
+    bus.gain.setValueAtTime(Math.max(bus.gain.value, 0.0001), t);
+    bus.gain.exponentialRampToValueAtTime(0.0001, t + fade);
+    const dead = bus;
+    setTimeout(() => {
+      if (!running && bus === dead) { dead.disconnect(); bus = null; }
+    }, fade * 1000 + 100);
+  }
+
+  return { start, stop };
+})();
+
+/* ============================================================
+   設定: 入力ガイド / 効果音 / BGM のON/OFF(localStorageに保存)
+   ============================================================ */
+const SETTINGS_KEY = "juni.settings";
+const settings = { guide: true, hint: true, easy: false, sfx: true, bgm: true };
+try {
+  Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
+} catch {}
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+}
+SFX.setMuted(!settings.sfx);
+
+/* ============================================================
+   入力統計: 行別・方向別の正誤を記録する(リザルト画面の核)
+   帰属は「実際に打った文字」の行と方向
+   ============================================================ */
+function newStats() {
+  return {
+    rows: Object.fromEntries(ALL_ROWS.map((r) => [r, { ok: 0, ng: 0 }])),
+    dirs: Array.from({ length: 5 }, () => ({ ok: 0, ng: 0 })),
+  };
+}
+let stats = newStats();
+
+function recordInput(kana, dir, ok) {
+  const bucket = ok ? "ok" : "ng";
+  stats.dirs[dir][bucket]++;
+  if (kana === MOD) return; // 小゛゜は行を持たない(方向のみ記録)
+  const row = rowOf(toBase(kana));
+  if (row) stats.rows[row][bucket]++; // 句読点・記号は行の統計に含めない
+}
+
+/* ---- ゲーム状態: スコア・コンボ・ライフ ---- */
+const game = {
+  score: 0,
+  combo: 0,
+  maxCombo: 0,
+  lives: CONFIG.LIVES,
+  destroyed: 0,
+  level: 1,
+  started: false, // スタートボタンを押すまでは動かさない
+  over: false,
+  paused: false,  // 一時停止・設定画面を開いている間
+};
+let floaters = []; // 獲得スコアのポップアップ
+
+const hudScoreEl = document.getElementById("hud-score");
+const hudComboEl = document.getElementById("hud-combo");
+const hudLevelEl = document.getElementById("hud-level");
+const hudLivesEl = document.getElementById("hud-lives");
+const overlayEl = document.getElementById("overlay");
+
+/* コンボ倍率: COMBO_STEP 連鎖ごとに +COMBO_BONUS、上限 COMBO_MULT_MAX */
+function comboMult() {
+  return Math.min(
+    1 + Math.floor(game.combo / CONFIG.COMBO_STEP) * CONFIG.COMBO_BONUS,
+    CONFIG.COMBO_MULT_MAX);
+}
+
+function updateHud() {
+  hudScoreEl.textContent = game.score;
+  hudComboEl.textContent = game.combo;
+  hudLevelEl.textContent = game.level;
+  hudLivesEl.textContent =
+    "◆".repeat(game.lives) + "◇".repeat(CONFIG.LIVES - game.lives);
+}
+
+/* ターゲティング: ロック中はその隕石だけが対象。
+   未ロックなら期待トークンが一致する隕石のうち最も下のものにロックする */
+let lockedTarget = null;
+
+function handleGameInput(token) {
+  if (!game.started || game.over || game.paused) return null; // 記録対象外
+  if (lockedTarget && !meteors.includes(lockedTarget)) lockedTarget = null;
+  let target = null;
+  if (lockedTarget) {
+    if (expectedToken(lockedTarget) === token) target = lockedTarget;
+  } else {
+    for (const m of meteors) {
+      if (expectedToken(m) === token && (!target || m.y > target.y)) target = m;
+    }
+  }
+  if (!target) {
+    onMiss(token);
+    return false;
+  }
+  lockedTarget = target;
+  game.combo++;
+  game.maxCombo = Math.max(game.maxCombo, game.combo);
+  SFX.tick(game.combo);
+  target.charProg++;
+  if (target.charProg >= target.chars[target.charIdx].tokens.length) {
+    target.charIdx++;
+    target.charProg = 0;
+    spawnParticles(target.x, target.y, CONFIG.HIT_PARTICLES);
+  }
+  if (target.charIdx >= target.word.len) {
+    spawnParticles(target.x, target.y, CONFIG.BOOM_PARTICLES);
+    meteors = meteors.filter((m) => m !== target);
+    lockedTarget = null;
+    SFX.boom();
+    onDestroy(target);
+  } else if (target.charProg === 0) {
+    SFX.crack();
+  }
+  updateHud();
+  return true;
+}
+
+function onMiss(token) {
+  chipEl.classList.add("miss");
+  game.combo = 0;
+  SFX.miss();
+  updateHud();
+}
+
+function onDestroy(meteor) {
+  const gained = Math.round(
+    meteor.word.actions * CONFIG.SCORE_PER_ACTION * comboMult() *
+    (settings.easy ? CONFIG.EASY_SCORE : 1));
+  game.score += gained;
+  game.destroyed++;
+  floaters.push({ x: meteor.x, y: meteor.y, text: `+${gained}`, t: 0, life: 0.9 });
+  while (game.destroyed >= killsNeededFor(game.level + 1)) {
+    game.level++;
+    const sub = game.level <= LEVELS.length
+      ? LEVELS[game.level - 1].label
+      : "さらに加速";
+    floaters.push({
+      x: fieldW / 2, y: fieldH * 0.35,
+      text: `LEVEL ${game.level}`, sub,
+      t: 0, life: 1.8, big: true,
+    });
+    SFX.levelUp();
+  }
+}
+
+function onLanded(meteor) {
+  dangerFlash = 1;
+  game.lives--;
+  SFX.land();
+  updateHud();
+  if (game.lives <= 0) gameOver();
+}
+
+const HISCORE_KEY = "juni.highscore";
+
+function loadHighscore() {
+  try { return Number(localStorage.getItem(HISCORE_KEY)) || 0; }
+  catch { return 0; } // プライベートモード等でlocalStorage不可
+}
+function saveHighscore(v) {
+  try { localStorage.setItem(HISCORE_KEY, String(v)); } catch {}
+}
+
+/* 正答率(%)。試行がなければ null */
+function accuracy(s) {
+  const total = s.ok + s.ng;
+  return total ? Math.round((s.ok / total) * 100) : null;
+}
+
+function statCell(label, value, cls) {
+  return `<div class="cell ${cls}">${label}<b>${value}</b></div>`;
+}
+
+/* 成長の記録: ゲームごとの行別正答率を残す(直近20回) */
+const HISTORY_KEY = "juni.history";
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) ?? []; }
+  catch { return []; }
+}
+function saveHistory(h) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-20))); } catch {}
+}
+
+function renderResultStats(prev) {
+  /* 行別 正答率: 低い行ほど強調。↑↓は前回プレイとの比較 */
+  document.getElementById("go-rows").innerHTML = ALL_ROWS.map((r) => {
+    const acc = accuracy(stats.rows[r]);
+    const cls = acc === null ? "na" : acc < 70 ? "bad" : acc < 90 ? "warn" : "";
+    let arrow = "";
+    const prevAcc = prev?.rows?.[r];
+    if (acc !== null && prevAcc != null && acc !== prevAcc) {
+      arrow = acc > prevAcc ? '<i class="up">↑</i>' : '<i class="down">↓</i>';
+    }
+    return statCell(r, acc === null ? "—" : `${acc}%${arrow}`, cls);
+  }).join("");
+
+  /* 方向別 ミス率: 十字配置。「下フリックが弱い」を可視化する */
+  const dirCell = (dir, label) => {
+    const s = stats.dirs[dir];
+    const total = s.ok + s.ng;
+    const miss = total ? Math.round((s.ng / total) * 100) : null;
+    const cls = miss === null ? "na" : miss >= 30 ? "bad" : miss >= 10 ? "warn" : "";
+    return statCell(label, miss === null ? "—" : `${miss}%`, cls);
+  };
+  document.getElementById("go-dirs").innerHTML = [
+    '<div class="cell blank"></div>', dirCell(DIR_UP, "↑"), '<div class="cell blank"></div>',
+    dirCell(DIR_LEFT, "←"), dirCell(DIR_CENTER, "中央"), dirCell(DIR_RIGHT, "→"),
+    '<div class="cell blank"></div>', dirCell(DIR_DOWN, "↓"), '<div class="cell blank"></div>',
+  ].join("");
+}
+
+function gameOver() {
+  game.over = true;
+  SFX.gameOver();
+  BGM.stop(); // ジングルの邪魔をしないようフェードアウト
+  const best = loadHighscore();
+  const isNewBest = game.score > best;
+  if (isNewBest) saveHighscore(game.score);
+  document.getElementById("go-score").textContent = game.score;
+  document.getElementById("go-best").textContent = Math.max(best, game.score);
+  document.getElementById("go-newbest").classList.toggle("hidden", !isNewBest);
+  document.getElementById("go-combo").textContent = game.maxCombo;
+  document.getElementById("go-destroyed").textContent = game.destroyed;
+  document.getElementById("go-level").textContent = game.level;
+  const history = loadHistory();
+  renderResultStats(history.at(-1) ?? null);
+  history.push({
+    t: Date.now(),
+    score: game.score,
+    rows: Object.fromEntries(ALL_ROWS.map((r) => [r, accuracy(stats.rows[r])])),
+  });
+  saveHistory(history);
+  overlayEl.classList.remove("hidden");
+}
+
+function restart() {
+  Object.assign(game, {
+    score: 0, combo: 0, maxCombo: 0, lives: CONFIG.LIVES,
+    destroyed: 0, level: 1, started: true, over: false, paused: false,
+  });
+  meteors = [];
+  particles = [];
+  floaters = [];
+  lockedTarget = null;
+  stats = newStats();
+  recentWords = [];
+  spawnTimer = CONFIG.SPAWN_INTERVAL;
+  overlayEl.classList.add("hidden");
+  if (settings.bgm) BGM.start(); // リトライ(ユーザー操作)の中でBGMを再開
+  updateHud();
+}
+/* 状態を全リセットしてタイトル画面に戻る */
+function goToTitle() {
+  restart();             // リセット(各オーバーレイも閉じる)
+  game.started = false;  // タイトル画面で待機
+  document.getElementById("start").classList.remove("hidden");
+}
+document.getElementById("go-retry").addEventListener("click", () => {
+  SFX.ensure();
+  goToTitle();
+});
+updateHud();
+
+/* ---- スタート画面: ボタンを押して開始(この操作でオーディオも起動) ---- */
+const startEl = document.getElementById("start");
+document.getElementById("btn-start").addEventListener("click", () => {
+  SFX.ensure();
+  if (settings.bgm) BGM.start();
+  game.started = true;
+  startEl.classList.add("hidden");
+});
+
+/* ---- 一時停止: 再開 or 最初からやり直す ---- */
+const pauseEl = document.getElementById("pause");
+document.getElementById("btn-pause").addEventListener("click", () => {
+  if (!game.started || game.over) return;
+  game.paused = true;
+  pauseEl.classList.remove("hidden");
+});
+document.getElementById("btn-resume").addEventListener("click", () => {
+  pauseEl.classList.add("hidden");
+  game.paused = false;
+});
+document.getElementById("btn-pause-retry").addEventListener("click", () => {
+  pauseEl.classList.add("hidden");
+  goToTitle(); // 全リセットしてタイトル画面へ
+});
+
+/* ---- 設定画面: 開いている間はゲームを一時停止する ---- */
+const settingsEl = document.getElementById("settings");
+const stGuideEl = document.getElementById("st-guide");
+const stHintEl = document.getElementById("st-hint");
+const stSfxEl = document.getElementById("st-sfx");
+const stBgmEl = document.getElementById("st-bgm");
+
+function openSettings() {
+  stGuideEl.checked = settings.guide;
+  stHintEl.checked = settings.hint;
+  stSfxEl.checked = settings.sfx;
+  stBgmEl.checked = settings.bgm;
+  game.paused = true;
+  settingsEl.classList.remove("hidden");
+}
+document.getElementById("btn-settings").addEventListener("click", openSettings);
+document.getElementById("btn-start-settings").addEventListener("click", openSettings);
+document.getElementById("st-close").addEventListener("click", () => {
+  settingsEl.classList.add("hidden");
+  game.paused = false;
+});
+stGuideEl.addEventListener("change", () => {
+  settings.guide = stGuideEl.checked;
+  saveSettings();
+});
+stHintEl.addEventListener("change", () => {
+  settings.hint = stHintEl.checked;
+  saveSettings();
+});
+
+/* ---- モード選択タブ: スタート画面とリザルト画面で共通 ---- */
+const MODE_DESC = {
+  normal: "", // ノーマルは説明なし
+  easy: "落下がゆっくり、隕石も少なめの練習モード。",
+};
+function syncModeTabs() {
+  const mode = settings.easy ? "easy" : "normal";
+  document.querySelectorAll(".mode-tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.mode === mode));
+  document.querySelectorAll(".mode-desc").forEach((p) =>
+    p.textContent = MODE_DESC[mode]);
+  /* プレー中もどのモードかHUDで分かるように(ノーマル時は非表示) */
+  document.getElementById("hud-mode").classList.toggle("hidden", !settings.easy);
+}
+document.querySelectorAll(".mode-tab").forEach((b) =>
+  b.addEventListener("click", () => {
+    settings.easy = b.dataset.mode === "easy";
+    saveSettings();
+    syncModeTabs();
+  }));
+syncModeTabs();
+stSfxEl.addEventListener("change", () => {
+  settings.sfx = stSfxEl.checked;
+  SFX.setMuted(!settings.sfx);
+  saveSettings();
+});
+stBgmEl.addEventListener("change", () => {
+  settings.bgm = stBgmEl.checked;
+  if (settings.bgm) {
+    SFX.ensure(); // トグル操作もユーザー操作なのでここで起動できる
+    BGM.start();
+  } else {
+    BGM.stop(0.4);
+  }
+  saveSettings();
+});
+
+/* ---- 更新と描画 ---- */
+function update(dt) {
+  if (game.started && !game.over && !game.paused) {
+    spawnTimer += dt;
+    const interval = Math.max(
+      CONFIG.SPAWN_INTERVAL * spawnScale(), CONFIG.SPAWN_INTERVAL_MIN) *
+      (settings.easy ? CONFIG.EASY_SPAWN : 1);
+    /* 場が空なら間隔を待たずに即出す(隕石ゼロの手持ち無沙汰を作らない) */
+    if (meteors.length === 0 ||
+        (spawnTimer >= interval && meteors.length < CONFIG.METEOR_MAX)) {
+      spawnTimer = 0;
+      spawnMeteor();
+    }
+    for (const m of meteors) {
+      m.y += m.speed * dt;
+      m.rot += m.rotSpeed * dt;
+    }
+    const landed = meteors.filter((m) => m.y + m.ry >= fieldH);
+    if (landed.length) {
+      meteors = meteors.filter((m) => m.y + m.ry < fieldH);
+      if (landed.includes(lockedTarget)) lockedTarget = null;
+      for (const m of landed) onLanded(m);
+    }
+  }
+  for (const p of particles) {
+    p.t += dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 120 * dt;
+  }
+  particles = particles.filter((p) => p.t < p.life);
+  for (const f of floaters) {
+    f.t += dt;
+    f.y -= 32 * dt;
+  }
+  floaters = floaters.filter((f) => f.t < f.life);
+  dangerFlash = Math.max(0, dangerFlash - dt * 1.5);
+}
+
+function drawMeteor(m) {
+  ctx.save();
+  ctx.translate(m.x, m.y);
+
+  /* 岩体: ジッタ付き楕円 + 大気圏で燃える縁 */
+  ctx.save();
+  ctx.rotate(m.rot * 0.1);
+  ctx.beginPath();
+  const n = m.shape.length;
+  for (let i = 0; i <= n; i++) {
+    const th = (i % n) / n * Math.PI * 2;
+    const j = m.shape[i % n];
+    const px = Math.cos(th) * m.rx * j;
+    const py = Math.sin(th) * m.ry * j;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.shadowColor = "rgba(255, 140, 60, 0.55)";
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = "#3a3550";
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "#584f78";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  /* クレーター */
+  ctx.fillStyle = "rgba(20, 18, 38, 0.5)";
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(
+      (m.seeds[i] - 0.5) * m.rx * 1.1,
+      (m.seeds[i + 3] - 0.5) * m.ry * 1.1,
+      2 + m.seeds[i + 2] * 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* ヒビ: 消した文字数ぶん放射状に */
+  ctx.strokeStyle = "rgba(255, 180, 84, 0.7)";
+  ctx.lineWidth = 1.2;
+  for (let c = 0; c < m.charIdx; c++) {
+    const a0 = m.seeds[c % 8] * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    let cx = 0, cy = 0;
+    for (let s = 1; s <= 3; s++) {
+      cx = Math.cos(a0 + (m.seeds[(c + s) % 8] - 0.5)) * (m.ry * s) / 3.2;
+      cy = Math.sin(a0 + (m.seeds[(c + s) % 8] - 0.5)) * (m.ry * s) / 3.2;
+      ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  /* ロック中の照準: 四隅のブラケットが明滅する */
+  if (m === lockedTarget) {
+    const pad = 10;
+    const bx = m.rx + pad;
+    const by = m.ry + pad;
+    const arm = 12;
+    ctx.strokeStyle = "#ffb454";
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(lastTime / 1000 * 6);
+    ctx.lineWidth = 2;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      ctx.beginPath();
+      ctx.moveTo(sx * bx - sx * arm, sy * by);
+      ctx.lineTo(sx * bx, sy * by);
+      ctx.lineTo(sx * bx, sy * by - sy * arm);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* 残りの読み: 次に打つ文字をハイライト、残りはグレー */
+  ctx.font = METEOR_FONT_STR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const rest = m.word.len - m.charIdx;
+  let tx = -((rest - 1) * CHAR_ADVANCE) / 2;
+  for (let i = m.charIdx; i < m.word.len; i++) {
+    const ch = displayChar(m, i);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(10, 13, 30, 0.85)";
+    ctx.strokeText(ch, tx, 0);
+    ctx.fillStyle = i === m.charIdx ? "#ffb454" : "#9aa2c0";
+    ctx.fillText(ch, tx, 0);
+    tx += CHAR_ADVANCE;
+  }
+  ctx.restore();
+}
+
+function draw() {
+  const grad = ctx.createLinearGradient(0, 0, 0, fieldH);
+  grad.addColorStop(0, "#0a0d1e");
+  grad.addColorStop(1, "#131a38");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, fieldW, fieldH);
+
+  ctx.fillStyle = "#e9e4d6";
+  for (const s of stars) {
+    ctx.globalAlpha = s.a;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (const m of meteors) drawMeteor(m);
+
+  for (const p of particles) {
+    ctx.globalAlpha = 1 - p.t / p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.textAlign = "center";
+  for (const f of floaters) {
+    ctx.globalAlpha = 1 - f.t / f.life;
+    ctx.fillStyle = "#ffb454";
+    if (f.big) {
+      ctx.font = "28px 'Hiragino Mincho ProN', 'Yu Mincho', serif";
+      ctx.fillText(f.text, f.x, f.y);
+      if (f.sub) {
+        ctx.font = "13px 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif";
+        ctx.fillStyle = "#9aa2c0";
+        ctx.fillText(f.sub, f.x, f.y + 24);
+      }
+    } else {
+      ctx.font = "bold 15px 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif";
+      ctx.fillText(f.text, f.x, f.y);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したらライフ-1 */
+  ctx.fillStyle = `rgba(255, 180, 84, ${0.35 + dangerFlash * 0.65})`;
+  const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
+  ctx.fillRect(0, fieldH - lh, fieldW, lh);
+}
+
+/* ---- 次のキーのヒント: ロック中の隕石(なければ最下部)の期待入力を
+   キーパッド上で光らせ、フリック方向の矢印を出す ---- */
+const HINT_ARROWS = { 1: ["◀", "l"], 2: ["▲", "u"], 3: ["▶", "r"], 4: ["▼", "d"] };
+let lastHint = ""; // "行:方向" のキャッシュ(毎フレームのDOM操作を避ける)
+
+function updateHint() {
+  let token = null;
+  if (settings.hint && game.started && !game.over && !game.paused) {
+    let m = lockedTarget;
+    if (!m) for (const c of meteors) if (!c || !m || c.y > m.y) m = c;
+    if (m) token = expectedToken(m);
+  }
+  let row = null;
+  let dir = -1;
+  if (token !== null) {
+    for (const r of KEY_LAYOUT) {
+      const i = FLICK_MAP[r].indexOf(token);
+      if (i !== -1) { row = r; dir = i; break; }
+    }
+  }
+  const sig = row ? `${row}:${dir}` : "";
+  if (sig === lastHint) return;
+  lastHint = sig;
+  for (const r of KEY_LAYOUT) keyEls[r].classList.remove("hint");
+  if (!row) return;
+  const key = keyEls[row];
+  key.classList.add("hint");
+  const mark = key.querySelector(".hint-mark");
+  const arrow = HINT_ARROWS[dir];
+  mark.textContent = arrow ? arrow[0] : "";
+  mark.className = "hint-mark" + (arrow ? " " + arrow[1] : "");
+}
+
+let lastTime = performance.now();
+function frame(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05); // タブ復帰時の暴走防止
+  lastTime = now;
+  update(dt);
+  updateHint();
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ============================================================
+   フリック入力判定 (Pointer Events で統一。touchstart は使わない)
+   pointerdown でキーを掴み、pointerup 時点の移動量で方向を確定
+   ============================================================ */
+const activePointers = new Map(); // pointerId → { key, x0, y0, guide }
+
+/* 移動量 → 方向。atan2は使わず軸比較で四方向に落とす(斜めの取りこぼし防止) */
+function dirFrom(dx, dy) {
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < CONFIG.FLICK_THRESHOLD) return DIR_CENTER;
+  if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? DIR_LEFT : DIR_RIGHT;
+  return dy < 0 ? DIR_UP : DIR_DOWN;
+}
+
+/* ---- フリックガイド: 押したキーの上に小さな十字で候補を出す ---- */
+function makeGuide(row, rect) {
+  const g = document.createElement("div");
+  g.className = "guide";
+  const cell = CONFIG.GUIDE_CELL;
+  const step = cell + CONFIG.GUIDE_GAP;
+  const size = cell + step * 2; // 十字全体の幅・高さ(3マス分)
+
+  /* キー中央の真上に置き、画面端では内側にずらして見切れを防ぐ */
+  let cx = rect.left + rect.width / 2;
+  cx = Math.min(Math.max(cx, size / 2 + 4), window.innerWidth - size / 2 - 4);
+  const originX = cx - size / 2;
+  const originY = rect.top - CONFIG.GUIDE_LIFT - size;
+
+  /* [中央, 左, 上, 右, 下] → 十字内の(列, 行) */
+  const grid = [[1, 1], [0, 1], [1, 0], [2, 1], [1, 2]];
+  g.cells = FLICK_MAP[row].map((kana, d) => {
+    if (kana === null) return null;
+    const c = document.createElement("div");
+    const label = kana === MOD ? "小゛゜" : kana;
+    c.className = "cell" + (label.length > 1 ? " sub" : "");
+    c.textContent = label;
+    c.style.left = originX + grid[d][0] * step + "px";
+    c.style.top = originY + grid[d][1] * step + "px";
+    c.style.width = cell + "px";
+    c.style.height = cell + "px";
+    g.appendChild(c);
+    return c;
+  });
+  document.body.appendChild(g);
+  return g;
+}
+
+function highlightGuide(g, dir) {
+  for (const c of g.cells) c?.classList.remove("on");
+  g.cells[dir]?.classList.add("on");
+}
+
+padEl.addEventListener("pointerdown", (e) => {
+  SFX.ensure(); // AudioContextはユーザー操作の中でしか起こせない
+  if (settings.bgm) BGM.start(); // 初回タッチでBGM開始(再生中の呼び出しは何もしない)
+  const key = e.target.closest(".key");
+  if (!key) return;
+  key.setPointerCapture(e.pointerId);
+  let guide = null;
+  if (settings.guide) {
+    guide = makeGuide(key.dataset.row, key.getBoundingClientRect());
+    highlightGuide(guide, DIR_CENTER);
+  }
+  activePointers.set(e.pointerId, { key, x0: e.clientX, y0: e.clientY, guide });
+  key.classList.add("pressed");
+});
+
+padEl.addEventListener("pointermove", (e) => {
+  const p = activePointers.get(e.pointerId);
+  if (!p || !p.guide) return;
+  highlightGuide(p.guide, dirFrom(e.clientX - p.x0, e.clientY - p.y0));
+});
+
+function releasePointer(e) {
+  const p = activePointers.get(e.pointerId);
+  if (!p) return null;
+  activePointers.delete(e.pointerId);
+  p.key.classList.remove("pressed");
+  p.guide?.remove();
+  return p;
+}
+
+padEl.addEventListener("pointerup", (e) => {
+  const p = releasePointer(e);
+  if (!p) return;
+  const dir = dirFrom(e.clientX - p.x0, e.clientY - p.y0);
+  const kana = FLICK_MAP[p.key.dataset.row][dir];
+  if (kana === null) return; // 存在しない方向は無反応
+  onInput(kana, dir);
+});
+
+padEl.addEventListener("pointercancel", releasePointer);
+
+padEl.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* ---- 確定入力をゲームへ渡す ---- */
+const chipEl = document.getElementById("chip");
+
+function onInput(kana, dir) {
+  chipEl.classList.remove("miss");
+  chipEl.textContent = `${kana === MOD ? "小゛゜" : kana}　${DIR_LABELS[dir]}`;
+  const hit = handleGameInput(kana);
+  if (hit !== null) recordInput(kana, dir, hit);
+}
+</script>
+</body>
+</html>

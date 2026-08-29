@@ -150,24 +150,11 @@ html, body {
   touch-action: none;
 }
 
-/* 次に打つキーのヒント: キーが光り、フリック方向の矢印が出る */
+/* 次に打つキーのヒント: キーが光る(フリック方向は示さない — 隕石を見て打たせる) */
 .key.hint {
   border-color: var(--ember);
   box-shadow: 0 0 12px rgba(255, 180, 84, 0.35);
 }
-.hint-mark {
-  position: absolute;
-  display: none;
-  color: var(--ember);
-  font-size: 12px;
-  line-height: 1;
-  pointer-events: none;
-}
-.key.hint .hint-mark { display: block; }
-.hint-mark.u { top: 3px; left: 50%; transform: translateX(-50%); }
-.hint-mark.d { bottom: 3px; left: 50%; transform: translateX(-50%); }
-.hint-mark.l { left: 5px; top: 50%; transform: translateY(-50%); }
-.hint-mark.r { right: 5px; top: 50%; transform: translateY(-50%); }
 .key.sub { font-size: clamp(14px, 2.4dvh, 19px); color: var(--dim); }
 .key.pressed,
 .key:active {
@@ -862,9 +849,6 @@ for (const row of KEY_LAYOUT) {
   key.className = "key" + (label.length > 1 ? " sub" : "");
   key.dataset.row = row;
   key.textContent = label;
-  const mark = document.createElement("span");
-  mark.className = "hint-mark";
-  key.appendChild(mark);
   padEl.appendChild(key);
   keyEls[row] = key;
 }
@@ -1878,9 +1862,8 @@ function draw() {
 }
 
 /* ---- 次のキーのヒント: ロック中の隕石(なければ最下部)の期待入力を
-   キーパッド上で光らせ、フリック方向の矢印を出す ---- */
-const HINT_ARROWS = { 1: ["◀", "l"], 2: ["▲", "u"], 3: ["▶", "r"], 4: ["▼", "d"] };
-let lastHint = ""; // "行:方向" のキャッシュ(毎フレームのDOM操作を避ける)
+   キーパッド上で光らせる。フリック方向は表示しない(隕石の文字を見て打たせる) ---- */
+let lastHint = ""; // 行IDのキャッシュ(毎フレームのDOM操作を避ける)
 
 function updateHint() {
   let token = null;
@@ -1890,24 +1873,16 @@ function updateHint() {
     if (m) token = expectedToken(m);
   }
   let row = null;
-  let dir = -1;
   if (token !== null) {
     for (const r of KEY_LAYOUT) {
-      const i = FLICK_MAP[r].indexOf(token);
-      if (i !== -1) { row = r; dir = i; break; }
+      if (FLICK_MAP[r].includes(token)) { row = r; break; }
     }
   }
-  const sig = row ? `${row}:${dir}` : "";
+  const sig = row ?? "";
   if (sig === lastHint) return;
   lastHint = sig;
   for (const r of KEY_LAYOUT) keyEls[r].classList.remove("hint");
-  if (!row) return;
-  const key = keyEls[row];
-  key.classList.add("hint");
-  const mark = key.querySelector(".hint-mark");
-  const arrow = HINT_ARROWS[dir];
-  mark.textContent = arrow ? arrow[0] : "";
-  mark.className = "hint-mark" + (arrow ? " " + arrow[1] : "");
+  if (row) keyEls[row].classList.add("hint");
 }
 
 let lastTime = performance.now();

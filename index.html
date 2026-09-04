@@ -17,6 +17,9 @@
   --pad-gap: 6px;             /* キー間の隙間 */
   --pad-pad: 8px;             /* キーパッド外周の余白 */
   --pad-side: clamp(24px, 9vw, 56px); /* キーパッド左右の空き(端のキーのフリック用) */
+  --lv-h: 38px;               /* 開始レベル選択の1マスの高さ */
+  --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
+  --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
 
   /* パレット: ビビッドな宇宙。深い紫の空に、黄・シアン・ピンクのネオンが差す */
   --bg-deep:    #1b1252;  /* 最深部の紫(体の背景) */
@@ -259,6 +262,7 @@ html, body {
   max-height: 90dvh;
   overflow-y: auto;
   padding: 22px 22px 20px;
+  touch-action: pan-y; /* パネル自体も縦スクロール可(body は touch-action: none) */
   background: var(--panel);
   border: 1px solid var(--key-edge);
   border-radius: 16px;
@@ -386,11 +390,18 @@ i.down { color: var(--danger); }
 .level-picker {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  gap: var(--lv-gap);
   margin-top: 8px;
+  /* 2段ぶんの高さに固定し、解放レベルが増えたら枠内でスクロールする */
+  max-height: calc(var(--lv-h) * var(--lv-rows) + var(--lv-gap) * (var(--lv-rows) - 1));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y; /* body の touch-action: none を上書きして縦スクロールを許す */
+  scrollbar-width: thin;
+  scrollbar-color: var(--key-edge) transparent;
 }
 .lv {
-  padding: 9px 0;
+  height: var(--lv-h);
   border: 1px solid var(--line);
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.05);
@@ -706,8 +717,9 @@ const CONFIG = {
   ENDLESS_SPAWN_PER_LEVEL: 0.04, // L6以降、1レベルごとの出現間隔短縮(-4%ずつ)
   SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
 
-  /* 開始レベル選択(テトリス方式)。解放上限 = 自己ベスト到達レベル − OFFSET */
-  START_LEVEL_MAX: 10,
+  /* 開始レベル選択(テトリス方式)。解放上限 = 自己ベスト到達レベル − OFFSET(上限なし)。
+     選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
+  START_LEVEL_SHOWN: 10,
   START_LEVEL_UNLOCK_OFFSET: 1,
 
   /* ランク: 到達レベルがしきい値以上なら、その文字。上から順に判定 */
@@ -1889,24 +1901,28 @@ const pickerEl = document.getElementById("level-picker");
 const levelDescEl = document.getElementById("level-desc");
 const startBestEl = document.getElementById("start-best");
 
-/* 解放されている最大の開始レベル。自己ベスト − OFFSET(最低1・上限あり) */
+/* 解放されている最大の開始レベル。自己ベスト − OFFSET(最低1・上限なし) */
 function maxStartLevel() {
-  const best = loadBest();
-  return Math.max(1, Math.min(best.level - CONFIG.START_LEVEL_UNLOCK_OFFSET, CONFIG.START_LEVEL_MAX));
+  return Math.max(1, loadBest().level - CONFIG.START_LEVEL_UNLOCK_OFFSET);
 }
 
 function renderLevelPicker() {
   const unlocked = maxStartLevel();
   settings.startLevel = Math.min(Math.max(settings.startLevel, 1), unlocked);
   pickerEl.innerHTML = "";
-  for (let lv = 1; lv <= CONFIG.START_LEVEL_MAX; lv++) {
+  /* 最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
+  const shown = Math.max(CONFIG.START_LEVEL_SHOWN, unlocked);
+  let activeEl = null;
+  for (let lv = 1; lv <= shown; lv++) {
     const b = document.createElement("button");
     b.className = "lv" + (lv > unlocked ? " locked" : "") + (lv === settings.startLevel ? " active" : "");
     b.dataset.level = lv;
     b.textContent = lv;
     if (lv > unlocked) b.disabled = true;
+    if (lv === settings.startLevel) activeEl = b;
     pickerEl.appendChild(b);
   }
+  activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
   levelDescEl.textContent = `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)}`;
   const best = loadBest();
   startBestEl.textContent = best.level ? `LEVEL ${best.level}` : "—";

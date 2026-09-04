@@ -46,7 +46,7 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 - **canvas/DOM の境界**: フィールドのみ canvas（座標はCSSピクセル、dprは `setTransform` で吸収）。キーパッド・HUD・オーバーレイ・フリックガイドは DOM。着地の判定線は canvas 下端そのもの（座標変換なし）
 - **ライフもスコアもない**。ミス入力も隕石の着地もコンボリセットのみ（着地は画面揺れ付き）。終了条件は `TIME_LIMIT` の時間切れだけ
 - **場の補充**: 隕石が `METEOR_MIN` 未満なら出現間隔を待たずに補充する（`SPAWN_MIN_GAP` は空ける）。1分間の手持ち無沙汰を作らないための仕様
-- **開始レベル**: タイトルで選択。解放上限は `juni.best.level − START_LEVEL_UNLOCK_OFFSET`（最低1）。`restart()` は `settings.startLevel` から始める
+- **開始レベル**: タイトルで選択。解放上限は `juni.best.level − START_LEVEL_UNLOCK_OFFSET`（最低1、上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロールする。`restart()` は `settings.startLevel` から始める
 - **リセットの範囲**: `restart()`/`goToTitle()` はそのプレイ1回分の状態を全消去するが、自己ベスト・成長記録・設定は残す
 - **localStorage キー**: `juni.best`（level, destroyed, maxCombo）/ `juni.settings`（guide, hint, sfx, bgm, startLevel）/ `juni.history`（直近20ゲームの level, destroyed, maxCombo と行別正答率。リザルトの前回比↑↓に使用）。旧 `juni.highscore` と `settings.easy` は読まない
 - 画面遷移はタイトル経由に統一: TIME UP「もう一度」も一時停止「やり直す」もタイトル画面へ戻る

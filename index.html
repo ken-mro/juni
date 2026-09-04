@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>十二 JŪNI</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230a0d1e'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23ffb454'>十</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%231b1252'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23ffd93d'>十</text></svg>">
 <style>
 /* ============================================================
    調整用定数（レイアウト系）— CSSカスタムプロパティ
@@ -12,20 +12,32 @@
    ============================================================ */
 :root {
   /* 縦配分: HUD(固定) + フィールド(残り全部) + キーパッド(固定) */
-  --hud-h: 44px;              /* HUDの高さ */
+  --hud-h: 54px;              /* HUDの高さ */
   --pad-h: min(34dvh, 320px); /* キーパッド全体の高さ(親指の可動域に収める) */
   --pad-gap: 6px;             /* キー間の隙間 */
   --pad-pad: 8px;             /* キーパッド外周の余白 */
   --pad-side: clamp(24px, 9vw, 56px); /* キーパッド左右の空き(端のキーのフリック用) */
+  --lv-h: 38px;               /* 開始レベル選択の1マスの高さ */
+  --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
+  --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
+  --lv-scroll-gap: 12px;      /* スクロールバーが出るときにマスの右側へ空ける余白 */
 
-  /* パレット: 夜空の紺 × 大気圏で燃える隕石の燠(おき)色 */
-  --bg-deep:   #0a0d1e;  /* 夜空・最深部 */
-  --bg-field:  #131a38;  /* フィールド下端の淡い紺 */
-  --key-face:  #1b2244;  /* キーの面 */
-  --key-edge:  #2c3663;  /* キーの縁 */
-  --text:      #e9e4d6;  /* 星明かりの生成り色 */
-  --dim:       #667099;  /* 非活性・補助テキスト */
-  --ember:     #ffb454;  /* 燠色アクセント(次に打つ文字・危険ライン) */
+  /* パレット: ビビッドな宇宙。深い紫の空に、黄・シアン・ピンクのネオンが差す */
+  --bg-deep:    #1b1252;  /* 最深部の紫(体の背景) */
+  --bg-field:   #3f2fae;  /* フィールド下端の明るい藍 */
+  --panel:      #241b6e;  /* オーバーレイのパネル面 */
+  --line:       #4238a6;  /* 区切り線・枡の枠 */
+  --key-face:   #3a2f97;  /* キー面(上) */
+  --key-face-2: #2c2378;  /* キー面(下) */
+  --key-edge:   #6a5fd6;  /* キーの縁 */
+  --key-shadow: #17104a;  /* キーの厚み */
+  --text:       #ffffff;
+  --dim:        #bdb8f2;  /* 非活性・補助テキスト(ラベンダー) */
+  --ember:      #ffd93d;  /* 主アクセント: 星の黄。次に打つ文字・強調 */
+  --cyan:       #4ff0e6;  /* 副アクセント: コンボ・ロック */
+  --pink:       #ff6fb5;  /* 副アクセント: グラデーションの相方 */
+  --danger:     #ff5c7a;  /* 警告(ラスト10秒・ミス) */
+  --ok:         #7dffb0;  /* 改善(↑) */
 
   --font-display: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
   --font-ui: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
@@ -52,15 +64,15 @@ html, body {
   flex-direction: column;
 }
 
-/* ---- HUD ---- */
+/* ---- HUD: 左=ロゴ / 中央=タイマー / 右=レベル(進行ゲージ)・コンボ ---- */
 #hud {
   flex: none;
   height: calc(var(--hud-h) + env(safe-area-inset-top));
-  padding: env(safe-area-inset-top) 10px 0 14px;
-  display: flex;
+  padding: env(safe-area-inset-top) 12px 0 14px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: clamp(6px, 2.5vw, 18px);
-  border-bottom: 1px solid #1d2447;
+  border-bottom: 1px solid var(--line);
 }
 #hud .wordmark {
   font-family: var(--font-display);
@@ -68,22 +80,7 @@ html, body {
   letter-spacing: 0.25em;
   font-weight: 600;
   white-space: nowrap; /* 狭い端末で「十二」が縦積みにならないように */
-  flex: none;
 }
-@media (max-width: 380px) {
-  #hud .wordmark small { display: none; } /* 狭い端末ではJŪNIを省く */
-}
-#hud-mode {
-  flex: none;
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  color: var(--ember);
-  border: 1px solid var(--ember);
-  border-radius: 8px;
-  padding: 2px 6px;
-  white-space: nowrap;
-}
-#hud-mode.hidden { display: none; }
 #hud .wordmark small {
   font-family: var(--font-ui);
   font-size: 9px;
@@ -92,21 +89,55 @@ html, body {
   margin-left: 6px;
   vertical-align: 2px;
 }
-#hud .stats {
-  margin-left: auto;
-  display: flex;
-  gap: clamp(6px, 2vw, 16px);
-  font-variant-numeric: tabular-nums;
+@media (max-width: 380px) {
+  #hud .wordmark small { display: none; } /* 狭い端末ではJŪNIを省く */
 }
-#hud .stat { text-align: right; }
-#hud .stat .label {
+#hud .label {
   display: block;
   font-size: 9px;
   letter-spacing: 0.2em;
   color: var(--dim);
 }
-#hud .stat .value { font-size: 15px; line-height: 1.2; }
-#hud .stat .value.lives { color: var(--ember); letter-spacing: 2px; }
+.hud-center { text-align: center; }
+.hud-center .time {
+  display: block;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hud-center .time.warn {
+  color: var(--danger);
+  animation: pulse 0.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+.hud-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: clamp(8px, 3vw, 18px);
+  font-variant-numeric: tabular-nums;
+}
+#hud .stat { text-align: right; }
+#hud .stat .value { display: block; font-size: 17px; line-height: 1.15; font-weight: 700; }
+#hud .stat .value.combo { color: var(--cyan); }
+.gauge {
+  width: 64px;
+  height: 4px;
+  margin: 3px 0 0 auto;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.gauge i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--ember), var(--pink));
+  transition: width 0.25s;
+}
 
 /* ---- フィールド (canvas) ---- */
 #field {
@@ -133,19 +164,21 @@ html, body {
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(4, 1fr);
   gap: var(--pad-gap);
-  background: linear-gradient(#0d1128, #0a0d1e);
-  border-top: 1px solid #1d2447;
+  background: linear-gradient(#22186a, var(--bg-deep));
+  border-top: 1px solid var(--line);
 }
 .key {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--key-face);
+  background: linear-gradient(var(--key-face), var(--key-face-2));
   border: 1px solid var(--key-edge);
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--key-shadow);
   font-family: var(--font-ui);
   font-size: clamp(20px, 3.6dvh, 28px);
+  font-weight: 600;
   color: var(--text);
   touch-action: none;
 }
@@ -153,13 +186,15 @@ html, body {
 /* 次に打つキーのヒント: キーが光る(フリック方向は示さない — 隕石を見て打たせる) */
 .key.hint {
   border-color: var(--ember);
-  box-shadow: 0 0 12px rgba(255, 180, 84, 0.35);
+  box-shadow: 0 3px 0 var(--key-shadow), 0 0 16px rgba(255, 217, 61, 0.45);
 }
 .key.sub { font-size: clamp(14px, 2.4dvh, 19px); color: var(--dim); }
 .key.pressed,
 .key:active {
   background: var(--key-edge);
   border-color: var(--ember);
+  box-shadow: none;
+  transform: translateY(2px);
 }
 
 /* ---- フリックガイド (押下中に5方向の候補を表示) ---- */
@@ -175,18 +210,18 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #323d70;
-  border: 1px solid #47549b;
+  background: #5a4fd0;
+  border: 1px solid #8a80ea;
   border-radius: 8px;
   font-size: 17px;
   color: var(--text);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 .guide .cell.sub { font-size: 10px; }
 .guide .cell.on {
   background: var(--ember);
   border-color: var(--ember);
-  color: #0a0d1e;
+  color: var(--bg-deep);
 }
 
 /* ---- 入力チップ: 直前に確定した入力を小さく表示 ---- */
@@ -201,9 +236,9 @@ html, body {
   pointer-events: none;
   transition: color 0.3s;
 }
-#chip.miss { color: #ff6d5a; transition: none; }
+#chip.miss { color: var(--danger); transition: none; }
 
-/* ---- オーバーレイ(スタート・ゲームオーバー・設定) ---- */
+/* ---- オーバーレイ(スタート・リザルト・一時停止・設定) ---- */
 #overlay,
 #settings,
 #start,
@@ -214,7 +249,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 13, 30, 0.78);
+  background: rgba(27, 18, 82, 0.72);
 }
 #overlay.hidden,
 #settings.hidden,
@@ -224,13 +259,15 @@ html, body {
 #settings .panel,
 #start .panel,
 #pause .panel {
-  width: min(82vw, 340px);
-  max-height: 88dvh;
+  width: min(84vw, 350px);
+  max-height: 90dvh;
   overflow-y: auto;
-  padding: 24px 24px 22px;
-  background: #10142b;
+  padding: 22px 22px 20px;
+  touch-action: pan-y; /* パネル自体も縦スクロール可(body は touch-action: none) */
+  background: var(--panel);
   border: 1px solid var(--key-edge);
-  border-radius: 14px;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   text-align: center;
 }
 #overlay .go-title,
@@ -239,41 +276,79 @@ html, body {
   font-family: var(--font-display);
   font-size: 26px;
   letter-spacing: 0.3em;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
+#overlay .go-title {
+  background: linear-gradient(90deg, var(--ember), var(--pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* リザルトの主役: 到達レベルを大きく */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 10px;
+}
+.hero .label { font-size: 10px; letter-spacing: 0.25em; color: var(--dim); }
+.hero .lv-big {
+  font-size: 58px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ember);
+  font-variant-numeric: tabular-nums;
+}
+.hero .lv-big small {
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+  margin-right: 8px;
+  vertical-align: 16px;
+}
+.hero .rank {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: var(--cyan);
+}
+.hero .rank b { font-size: 24px; margin-left: 4px; }
+
 #overlay .row {
   display: flex;
   justify-content: space-between;
   padding: 6px 2px;
   font-size: 14px;
   color: var(--dim);
-  border-bottom: 1px solid #1d2447;
+  border-bottom: 1px solid var(--line);
 }
 #overlay .row b {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-#overlay .badge {
+.badge {
   display: inline-block;
   margin-left: 6px;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 8px;
-  background: var(--ember);
-  color: #0a0d1e;
+  background: linear-gradient(90deg, var(--ember), var(--pink));
+  color: var(--bg-deep);
   font-size: 10px;
   font-style: normal;
   font-weight: 700;
-  vertical-align: 1px;
+  vertical-align: 2px;
 }
-#overlay .badge.hidden { display: none; }
+.badge.hidden { display: none; }
 #overlay .sec-title,
 #start .sec-title {
-  margin-top: 18px;
+  margin-top: 16px;
   text-align: left;
   font-size: 10px;
   letter-spacing: 0.25em;
   color: var(--dim);
-  border-bottom: 1px solid #1d2447;
+  border-bottom: 1px solid var(--line);
   padding-bottom: 5px;
 }
 .rowgrid {
@@ -284,7 +359,7 @@ html, body {
 }
 .rowgrid .cell,
 .dircross .cell {
-  background: #171d3d;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 7px;
   padding: 6px 0 5px;
   font-size: 11px;
@@ -298,11 +373,11 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .cell.warn b { color: var(--ember); }
-.cell.bad b { color: #ff6d5a; }
+.cell.bad b { color: var(--danger); }
 .cell.na b { color: var(--dim); }
-.cell b i { font-style: normal; font-size: 10px; margin-left: 1px; }
-.cell i.up { color: #8fd98f; }
-.cell i.down { color: #ff6d5a; }
+i.up, i.down { font-style: normal; font-size: 10px; margin-left: 1px; }
+i.up { color: var(--ok); }
+i.down { color: var(--danger); }
 .dircross {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -312,36 +387,85 @@ html, body {
 }
 .dircross .blank { visibility: hidden; }
 
-/* ---- モード選択タブ(スタート画面・リザルト画面) ---- */
-.mode-tabs {
-  display: flex;
-  gap: 6px;
-  margin-top: 10px;
+/* ---- 開始レベル選択(スタート画面) ---- */
+.level-picker {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--lv-gap);
+  margin-top: 8px;
+  /* 2段ぶんの高さに固定し、解放レベルが増えたら枠内でスクロールする */
+  max-height: calc(var(--lv-h) * var(--lv-rows) + var(--lv-gap) * (var(--lv-rows) - 1));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y; /* body の touch-action: none を上書きして縦スクロールを許す */
+  scrollbar-width: thin;
+  scrollbar-color: var(--key-edge) transparent;
 }
-.mode-tab {
-  flex: 1;
-  padding: 9px 0;
-  border: 1px solid var(--key-edge);
+/* 実際にスクロールするときだけ右に余白を取り、スクロールバーが番号に重ならないようにする */
+.level-picker.scrolls { padding-right: var(--lv-scroll-gap); }
+.lv {
+  height: var(--lv-h);
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: none;
-  color: var(--dim);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
   font-family: var(--font-ui);
-  font-size: 14px;
-  letter-spacing: 0.1em;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
-.mode-tab.active {
-  background: var(--key-edge);
-  border-color: var(--ember);
-  color: var(--text);
+.lv.active {
+  background: linear-gradient(135deg, var(--ember), var(--pink));
+  border-color: transparent;
+  color: var(--bg-deep);
 }
-.mode-desc {
+.lv.locked {
+  color: rgba(255, 255, 255, 0.28);
+  border-style: dashed;
+  background: none;
+  cursor: default;
+}
+.lv-desc {
   margin: 6px 2px 0;
   font-size: 11px;
   line-height: 1.7;
   color: var(--dim);
-  min-height: 1.7em; /* 説明なしのモードでも高さが跳ねない最小限 */
+  min-height: 1.7em;
 }
+.best-line {
+  margin-top: 12px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+.best-line b { color: var(--ember); font-variant-numeric: tabular-nums; }
+
+/* 練習モードのトグル(スタート画面)。設定画面の .toggle を流用し、補足を小さく添える */
+#start .toggle { margin-top: 10px; border-top: 1px solid var(--line); }
+.toggle small {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+/* 練習中: レベルは固定なので進行ゲージを出さない */
+#hud.practice .gauge { display: none; }
+#hud .badge-practice {
+  display: none;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--cyan);
+  color: var(--bg-deep);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  vertical-align: 2px;
+}
+#hud.practice .badge-practice { display: inline-block; }
+.hero.practice .rank,
+#overlay.practice .row.record { display: none; }
 
 .ghost {
   margin-top: 10px;
@@ -374,20 +498,21 @@ html, body {
 #st-close,
 #btn-start,
 #btn-resume {
-  margin-top: 22px;
+  margin-top: 20px;
   width: 100%;
-  padding: 12px 0;
+  padding: 13px 0;
   border: none;
-  border-radius: 10px;
-  background: var(--ember);
-  color: #0a0d1e;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--ember), var(--pink));
+  color: var(--bg-deep);
   font-family: var(--font-ui);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.2em;
+  box-shadow: 0 6px 18px rgba(255, 111, 181, 0.35);
   cursor: pointer;
 }
-#btn-start { margin-top: 12px; } /* モード選択の直下に置く */
+#btn-start { margin-top: 14px; } /* レベル選択の直下に置く */
 
 /* ---- 設定・一時停止ボタン(フィールド右下) ---- */
 #btn-settings,
@@ -399,7 +524,7 @@ html, body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(27, 34, 68, 0.75);
+  background: rgba(58, 47, 151, 0.7);
   border: 1px solid var(--key-edge);
   color: var(--dim);
   font-size: 18px;
@@ -413,9 +538,13 @@ html, body {
 /* ---- スタート画面 ---- */
 #start .start-title {
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: 38px;
   letter-spacing: 0.3em;
   font-weight: 600;
+  background: linear-gradient(90deg, var(--ember), var(--pink), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 #start .start-title small {
   display: block;
@@ -424,9 +553,10 @@ html, body {
   letter-spacing: 0.5em;
   color: var(--dim);
   margin-top: 6px;
+  -webkit-text-fill-color: var(--dim);
 }
 #start .start-copy {
-  margin: 16px 0 2px;
+  margin: 14px 0 2px;
   font-size: 13px;
   color: var(--text);
   letter-spacing: 0.05em;
@@ -444,7 +574,7 @@ html, body {
   justify-content: space-between;
   align-items: center;
   padding: 13px 2px;
-  border-bottom: 1px solid #1d2447;
+  border-bottom: 1px solid var(--line);
   font-size: 14px;
   color: var(--text);
 }
@@ -454,7 +584,7 @@ html, body {
   width: 44px;
   height: 24px;
   border-radius: 12px;
-  background: #2c3663;
+  background: var(--line);
   position: relative;
   cursor: pointer;
   transition: background 0.15s;
@@ -468,7 +598,7 @@ html, body {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #e9e4d6;
+  background: var(--text);
   transition: left 0.15s;
 }
 .toggle input:checked::after { left: 22px; }
@@ -478,12 +608,17 @@ html, body {
 <div id="app">
   <header id="hud">
     <span class="wordmark">十二<small>JŪNI</small></span>
-    <span id="hud-mode" class="hidden">のんびり</span>
-    <div class="stats">
-      <div class="stat"><span class="label">SCORE</span><span class="value" id="hud-score">0</span></div>
-      <div class="stat"><span class="label">COMBO</span><span class="value" id="hud-combo">0</span></div>
-      <div class="stat"><span class="label">LEVEL</span><span class="value" id="hud-level">1</span></div>
-      <div class="stat"><span class="label">LIFE</span><span class="value lives" id="hud-lives">◆◆◆</span></div>
+    <div class="hud-center">
+      <span class="label" id="hud-time-label">TIME</span>
+      <span class="time" id="hud-time">60</span>
+    </div>
+    <div class="hud-right">
+      <div class="stat">
+        <span class="label">LEVEL<em class="badge-practice">固定</em></span>
+        <span class="value" id="hud-level">1</span>
+        <div class="gauge"><i id="hud-progress"></i></div>
+      </div>
+      <div class="stat"><span class="label">COMBO</span><span class="value combo" id="hud-combo">0</span></div>
     </div>
   </header>
   <div id="field">
@@ -497,12 +632,15 @@ html, body {
 
 <div id="overlay" class="hidden">
   <div class="panel">
-    <div class="go-title">GAME OVER</div>
-    <div class="row"><span>スコア <em id="go-newbest" class="badge hidden">記録更新</em></span><b id="go-score">0</b></div>
-    <div class="row"><span>ハイスコア</span><b id="go-best">0</b></div>
-    <div class="row"><span>最大コンボ</span><b id="go-combo">0</b></div>
+    <div class="go-title" id="go-title">TIME UP!</div>
+    <div class="hero" id="go-hero">
+      <span class="label"><span id="go-level-label">到達レベル</span> <em id="go-newbest" class="badge hidden">記録更新</em></span>
+      <div class="lv-big"><small>LEVEL</small><span id="go-level">1</span></div>
+      <div class="rank">RANK<b id="go-rank">C</b></div>
+    </div>
+    <div class="row record"><span>自己ベスト</span><b id="go-best">—</b></div>
     <div class="row"><span>撃破</span><b id="go-destroyed">0</b></div>
-    <div class="row"><span>到達レベル</span><b id="go-level">1</b></div>
+    <div class="row"><span>最大コンボ</span><b id="go-combo">0</b></div>
     <div class="sec-title">行別 正答率（↑↓ 前回比）</div>
     <div id="go-rows" class="rowgrid"></div>
     <div class="sec-title">方向別 ミス率</div>
@@ -514,18 +652,18 @@ html, body {
 <div id="start">
   <div class="panel">
     <div class="start-title">十二<small>JŪNI</small></div>
-    <p class="start-copy">フリック入力で地球を救え！</p>
+    <p class="start-copy">1分間で、どこまでレベルを上げられる？</p>
     <div class="sec-title">あそびかた</div>
     <ul class="start-rules">
-      <li>隕石のことばを入力して破壊</li>
-      <li>隕石が下のラインに3回落ちると終了</li>
+      <li>隕石のことばをフリック入力で破壊</li>
+      <li>撃破を重ねるとレベルアップ。字種が増え、速くなる</li>
+      <li>落としてもOK。コンボが切れるだけ</li>
     </ul>
-    <div class="sec-title">モード</div>
-    <div class="mode-tabs">
-      <button class="mode-tab" data-mode="normal">ノーマル</button>
-      <button class="mode-tab" data-mode="easy">のんびり</button>
-    </div>
-    <p class="mode-desc"></p>
+    <div class="sec-title">開始レベル</div>
+    <div id="level-picker" class="level-picker"></div>
+    <p id="level-desc" class="lv-desc"></p>
+    <p class="best-line">自己ベスト <b id="start-best">—</b></p>
+    <label class="toggle"><span>練習モード<small>レベル固定・時間無制限。記録は残さない</small></span><input type="checkbox" id="st-practice"></label>
     <button id="btn-start">スタート</button>
     <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
   </div>
@@ -535,6 +673,7 @@ html, body {
   <div class="panel">
     <div class="go-title">一時停止</div>
     <button id="btn-resume">再開</button>
+    <button id="btn-pause-finish" class="ghost hidden">終了して結果を見る</button>
     <button id="btn-pause-retry" class="ghost">やり直す</button>
   </div>
 </div>
@@ -560,51 +699,93 @@ html, body {
 const CONFIG = {
   FLICK_THRESHOLD: 25,  // フリック方向確定の移動量しきい値(px)。未満は中央=あ段
   MAX_DPR: 2,           // canvasのdevicePixelRatio上限(高DPI端末の負荷対策)
-  STAR_COUNT: 70,       // 背景の星の数
+  STAR_COUNT: 80,       // 背景の星の数
   DANGER_LINE_H: 2,     // フィールド下端の危険ラインの太さ(px)
   GUIDE_CELL: 34,       // フリックガイドの1マスの大きさ(px)
   GUIDE_GAP: 3,         // ガイドのマス間の隙間(px)
   GUIDE_LIFT: 10,       // ガイドをキー上端からどれだけ浮かせるか(px)
 
-  FALL_SPEED: 28,       // 隕石の基本落下速度(px/秒)
+  /* 1プレイの時間制限。ライフはなく、時間切れで必ず終わる */
+  TIME_LIMIT: 60,       // 制限時間(秒)
+  LAST_SPURT: 10,       // 残りこの秒数からラストスパート演出(タイマー赤・秒カウント音・BGM加速)
+
+  FALL_SPEED: 30,       // 隕石の基本落下速度(px/秒)
   FALL_SPEED_VAR: 0.25, // 落下速度の個体差(±この割合)
-  SPAWN_INTERVAL: 3.0,  // 隕石の出現間隔(秒)
+  SPAWN_INTERVAL: 2.4,  // 隕石の出現間隔(秒)
+  SPAWN_MIN_GAP: 0.45,  // 場が少ないときの補充でも最低これだけは間を置く(秒)
+  METEOR_MIN: 2,        // 場に常に維持する隕石数(これ未満なら間隔を待たず補充)
   METEOR_MAX: 5,        // 同時に存在できる隕石の上限
   METEOR_FONT: 20,      // 隕石の文字サイズ(px)
   METEOR_RY: 26,        // 隕石の縦半径(px)。横半径は文字数から決まる
   HIT_PARTICLES: 8,     // 1文字消したときの破片の数
   BOOM_PARTICLES: 26,   // 破壊時の破片の数
+  RING_PARTICLES: 48,   // レベルアップ時に画面中央から放つ破片の数
+  CONFETTI: 110,        // 記録更新時に降らせる紙吹雪の数
+  SHAKE_AMP: 6,         // 隕石着地時の画面揺れの振幅(px)
+  SHAKE_DECAY: 18,      // 揺れの減衰速度(px/秒)
+  SKY_LERP: 2.0,        // レベルアップ時の空色の追従速度(1/秒)
 
   SOUND_VOLUME: 0.5,    // 効果音の全体音量(0で無音)
   BGM_VOLUME: 0.25,     // BGMの全体音量(0で無音)。効果音とは独立に調整する
-  BGM_BPM: 112,         // BGMの基本テンポ。レベルに応じてわずかに上がる
-  BGM_FADE_OUT: 1.5,    // ゲームオーバー時にBGMをフェードアウトさせる秒数
+  BGM_BPM: 132,         // BGMの基本テンポ(チップチューン)
+  BGM_BPM_PER_LEVEL: 2, // レベルごとのテンポ上昇
+  BGM_SPURT_BPM_ADD: 16,// ラストスパート中のテンポ加算
+  BGM_FADE_OUT: 1.5,    // 終了時にBGMをフェードアウトさせる秒数
   BGM_LEVEL_CAP: 12,    // BGMのレベル追従の上限(これ以上のレベルでは変化しない)
 
-  LIVES: 3,             // 開始時のライフ
-  SCORE_PER_ACTION: 10, // 破壊時: actions × この値 × コンボ倍率
-  COMBO_STEP: 10,       // この連鎖数ごとにコンボ倍率が上がる
-  COMBO_BONUS: 0.5,     // 1段階あたりの倍率上昇
-  COMBO_MULT_MAX: 3.0,  // コンボ倍率の上限
+  COMBO_MILESTONE: 10,  // この連鎖数ごとにコンボ演出(バナー+チャイム)
   SPAWN_RETRY: 30,      // 先頭文字が重複しない単語を探す試行回数
   RECENT_WORDS: 10,     // 直近この数の単語は再出題しない
 
-  /* レベル進行。難易度の主軸は行の解放で、速度・出現間隔は補助 */
-  LEVEL_KILLS: [8, 18, 30, 44],                  // L2..L5に上がるのに必要な累計撃破数
-  LEVEL_SPEED: [1.0, 1.15, 1.3, 1.5, 1.7],       // レベル別の落下速度係数
-  LEVEL_SPAWN: [1.0, 0.93, 0.86, 0.79, 0.73],    // レベル別の出現間隔係数
-
-  /* L5到達後のエンドレス進行: 一定撃破数ごとにレベルが上がり続け、
-     そのたびに速度が上がり続ける(速度に上限なし) */
-  ENDLESS_KILLS_PER_LEVEL: 12,   // L6以降、1レベル上がるのに必要な撃破数
+  /* レベル進行。難易度の主軸は行の解放で、速度・出現間隔は補助。
+     LEVEL_KILLS[i] = レベル(i+1)で次に上がるのに必要な撃破数。
+     それ以降(エンドレス)は ENDLESS_KILLS_PER_LEVEL ごとに上がり続ける */
+  LEVEL_KILLS: [4, 5, 6, 7],
+  ENDLESS_KILLS_PER_LEVEL: 6,
+  LEVEL_SPEED: [1.0, 1.15, 1.3, 1.5, 1.7],       // L1..L5 の落下速度係数
+  LEVEL_SPAWN: [1.0, 0.93, 0.86, 0.79, 0.73],    // L1..L5 の出現間隔係数
   ENDLESS_SPEED_PER_LEVEL: 0.08, // L6以降、1レベルごとの速度上昇(L5比+8%ずつ)
   ENDLESS_SPAWN_PER_LEVEL: 0.04, // L6以降、1レベルごとの出現間隔短縮(-4%ずつ)
-  SPAWN_INTERVAL_MIN: 1.2,       // 出現間隔の下限(秒)。これ以上は縮まない
+  SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
 
-  /* のんびりモード(練習用): ゆっくり・まばら・スコアは控えめ */
-  EASY_SPEED: 0.6,  // 落下速度の係数
-  EASY_SPAWN: 1.5,  // 出現間隔の係数(長くなる)
-  EASY_SCORE: 0.5,  // 獲得スコアの係数
+  /* 開始レベル選択(テトリス方式)。解放上限 = 自己ベスト到達レベル − OFFSET(上限なし)。
+     OFFSET 0 = 到達したレベルからすぐ再挑戦できる。
+     選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
+  START_LEVEL_SHOWN: 10,
+  START_LEVEL_UNLOCK_OFFSET: 0,
+
+  /* ランク: 到達レベルがしきい値以上なら、その文字。上から順に判定 */
+  RANKS: [[9, "S"], [7, "A"], [5, "B"], [3, "C"], [1, "D"]],
+};
+
+/* canvas 描画色。CSSの :root パレットと合わせて調整する */
+const PALETTE = {
+  /* 空のグラデーション [上, 下]。レベルが上がるほど暖色へ。末尾以降は末尾で固定 */
+  SKY: [
+    ["#1b1252", "#4a35b8"], // L1 深い紫
+    ["#161a66", "#3c5ad0"], // L2 藍
+    ["#152470", "#2f86dc"], // L3 青
+    ["#26145e", "#8a3ad0"], // L4 紫紅
+    ["#36104e", "#d44088"], // L5 マゼンタ
+    ["#3a1244", "#ef6a3c"], // L6+ 夕焼け
+  ],
+  STAR: "#ffffff",
+  METEOR_BODY: "#4a3f9e",
+  METEOR_EDGE: "#9a8ff0",
+  METEOR_GLOW: "rgba(255, 111, 181, 0.6)",
+  CRATER: "rgba(18, 12, 60, 0.5)",
+  CRACK: "rgba(255, 217, 61, 0.85)",
+  CHAR_NEXT: "#ffd93d",
+  CHAR_REST: "#d6d5ff",
+  CHAR_OUTLINE: "rgba(18, 12, 60, 0.85)",
+  LOCK: "#4ff0e6",
+  PARTICLES: ["#ffd93d", "#4ff0e6", "#ff6fb5", "#ffffff"],
+  DANGER_RGB: "255, 92, 122",
+  FLOAT_WORD: "#ffd93d",
+  FLOAT_LEVEL: "#ffd93d",
+  FLOAT_SUB: "#d6d5ff",
+  FLOAT_COMBO: "#4ff0e6",
+  FLOAT_SPURT: "#ff5c7a",
 };
 
 /* 文字種ごとの追加アクション数(タップ回数)。難易度計算の基準 */
@@ -834,6 +1015,10 @@ const LEVELS = [
   { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN, label: "濁音・半濁音" },
   { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN | FLAG.SMALL, label: "小文字・拗音" },
 ];
+/* レベルの見出し。LEVELS を超えたら速度だけが上がる */
+function levelLabel(level) {
+  return level <= LEVELS.length ? LEVELS[level - 1].label : "全字種・スピードアップ";
+}
 
 /* レベルごとの出題プールを起動時に確定しておく */
 const LEVEL_POOLS = LEVELS.map((def) => LEXICON.filter((w) =>
@@ -871,13 +1056,27 @@ function resizeCanvas() {
   stars = Array.from({ length: CONFIG.STAR_COUNT }, () => ({
     x: Math.random() * fieldW,
     y: Math.random() * fieldH,
-    r: Math.random() * 1.3 + 0.3,
-    a: Math.random() * 0.5 + 0.15,
+    r: Math.random() * 1.4 + 0.3,
+    a: Math.random() * 0.5 + 0.25,
+    ph: Math.random() * Math.PI * 2,  // 瞬きの位相
+    sp: 1 + Math.random() * 2,        // 瞬きの速さ
   }));
 }
 
 new ResizeObserver(resizeCanvas).observe(fieldEl);
 resizeCanvas();
+
+/* ---- 空の色: レベルに応じた目標色へ毎フレームなじませる ---- */
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const SKY_RGB = PALETTE.SKY.map((pair) => pair.map(hexToRgb));
+let sky = SKY_RGB[0].map((c) => [...c]); // 現在の [上, 下] RGB
+function skyTarget() {
+  return SKY_RGB[Math.min(game.level - 1, SKY_RGB.length - 1)];
+}
+const rgbStr = (c) => `rgb(${c.map(Math.round).join(",")})`;
 
 /* ============================================================
    隕石: 生成・落下・ターゲティング・破壊
@@ -889,13 +1088,12 @@ let meteors = [];
 let particles = [];
 let spawnTimer = CONFIG.SPAWN_INTERVAL; // 起動直後に1体出す
 let dangerFlash = 0;
+let shake = 0; // 画面揺れの残り振幅(px)
 
 /* 難易度スケール。L1〜L5はテーブル、L6以降はレベルに比例して伸び続ける */
 function speedScale() {
-  const easy = settings.easy ? CONFIG.EASY_SPEED : 1;
-  if (game.level <= 5) return CONFIG.LEVEL_SPEED[game.level - 1] * easy;
-  return CONFIG.LEVEL_SPEED[4] *
-    (1 + (game.level - 5) * CONFIG.ENDLESS_SPEED_PER_LEVEL) * easy;
+  if (game.level <= 5) return CONFIG.LEVEL_SPEED[game.level - 1];
+  return CONFIG.LEVEL_SPEED[4] * (1 + (game.level - 5) * CONFIG.ENDLESS_SPEED_PER_LEVEL);
 }
 function spawnScale() {
   if (game.level <= 5) return CONFIG.LEVEL_SPAWN[game.level - 1];
@@ -904,14 +1102,9 @@ function spawnScale() {
     0.01);
 }
 
-/* 次のレベルに必要な累計撃破数。L6以降は一定間隔で無限に続く */
-function killsNeededFor(level) {
-  if (level <= 1) return 0;
-  if (level <= LEVELS.length + 1 && level - 2 < CONFIG.LEVEL_KILLS.length) {
-    return CONFIG.LEVEL_KILLS[level - 2];
-  }
-  return CONFIG.LEVEL_KILLS.at(-1) +
-    (level - LEVELS.length) * CONFIG.ENDLESS_KILLS_PER_LEVEL;
+/* そのレベルで次に上がるのに必要な撃破数 */
+function killsToNext(level) {
+  return CONFIG.LEVEL_KILLS[level - 1] ?? CONFIG.ENDLESS_KILLS_PER_LEVEL;
 }
 
 let recentWords = []; // 直近に出題した読み(重複出題の回避用)
@@ -972,6 +1165,8 @@ function expectedToken(m) {
   return m.chars[m.charIdx].tokens[m.charProg];
 }
 
+const pickColor = () => PALETTE.PARTICLES[Math.floor(Math.random() * PALETTE.PARTICLES.length)];
+
 function spawnParticles(x, y, n) {
   for (let i = 0; i < n; i++) {
     const ang = Math.random() * Math.PI * 2;
@@ -983,10 +1178,41 @@ function spawnParticles(x, y, n) {
       life: 0.5 + Math.random() * 0.4,
       t: 0,
       r: 1.5 + Math.random() * 2.5,
-      color: Math.random() < 0.6 ? "#ffb454" : "#e9e4d6",
+      color: pickColor(),
     });
   }
 }
+
+/* レベルアップ: 画面中央から輪状に放つ */
+function spawnRing(n) {
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * Math.PI * 2;
+    const sp = 180 + Math.random() * 60;
+    particles.push({
+      x: fieldW / 2, y: fieldH * 0.4,
+      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+      life: 0.8 + Math.random() * 0.3, t: 0,
+      r: 2 + Math.random() * 2,
+      color: pickColor(),
+    });
+  }
+}
+
+/* 記録更新: 上から紙吹雪を降らせる */
+function spawnConfetti(n) {
+  for (let i = 0; i < n; i++) {
+    particles.push({
+      x: Math.random() * fieldW, y: -10 - Math.random() * 60,
+      vx: (Math.random() - 0.5) * 70, vy: 30 + Math.random() * 80,
+      life: 2.2 + Math.random() * 1.2, t: 0,
+      r: 2 + Math.random() * 3,
+      color: pickColor(),
+    });
+  }
+}
+
+/* midiノート番号 → 周波数(69 = A4 = 440Hz)。効果音とBGMで共用 */
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 /* ============================================================
    効果音: Web Audio APIによる合成音(外部ファイルなし)
@@ -1042,6 +1268,13 @@ const SFX = (() => {
     src.start(t0);
   }
 
+  /* 一連のメロディ(midi配列)を等間隔で鳴らす */
+  function melody(notes, step, dur, opts) {
+    notes.forEach((m, i) => tone(midiHz(m), dur, { ...opts, delay: (opts.delay ?? 0) + i * step }));
+  }
+
+  const MAJOR = [0, 2, 4, 5, 7, 9, 11]; // 長音階の度数(コンボで登る)
+
   return {
     ensure,
     state: () => ctx?.state ?? "none",
@@ -1052,82 +1285,114 @@ const SFX = (() => {
       muted = m;
       if (master) master.gain.value = m ? 0 : CONFIG.SOUND_VOLUME;
     },
-    /* 正解入力。コンボが乗るほどピッチが上がる */
-    tick(combo) { tone(880 + Math.min(combo, 40) * 12, 0.06, { type: "triangle", vol: 0.18 }); },
+    /* 正解入力。コンボが乗るほど長音階を1音ずつ登る(2オクターブで頭打ち) */
+    tick(combo) {
+      const i = Math.min(combo, 14);
+      tone(midiHz(72 + MAJOR[i % 7] + 12 * Math.floor(i / 7)), 0.07, { type: "triangle", vol: 0.18 });
+    },
     /* 1文字削れた(ヒビ) */
-    crack() { noise(0.08, { vol: 0.15, freq: 2500 }); tone(320, 0.09, { type: "square", vol: 0.12, slide: 140 }); },
-    /* 隕石破壊 */
-    boom() { noise(0.4, { vol: 0.5, freq: 1200 }); tone(90, 0.35, { vol: 0.5, slide: -50 }); },
-    /* ミス入力 */
-    miss() { tone(140, 0.18, { type: "square", vol: 0.22, slide: -40 }); },
-    /* 隕石着地(ライフ減): 警報の2音+衝撃。
-       低周波のみだとスマホのスピーカーで聞こえないため中域主体にする */
+    crack() { noise(0.07, { vol: 0.12, freq: 3000 }); tone(520, 0.08, { type: "square", vol: 0.1, slide: 200 }); },
+    /* 隕石破壊: 低い衝撃 + 上昇するチャイム */
+    boom() {
+      noise(0.3, { vol: 0.4, freq: 1400 });
+      tone(110, 0.3, { vol: 0.45, slide: -60 });
+      melody([79, 84], 0.06, 0.12, { type: "square", vol: 0.1, delay: 0.02 });
+    },
+    /* ミス入力: 短く低いブザー */
+    miss() { tone(180, 0.14, { type: "square", vol: 0.18, slide: -60 }); },
+    /* 隕石着地: 軽い「ぽん」。ライフは減らないので警報にしない */
     land() {
-      tone(660, 0.13, { type: "square", vol: 0.28, slide: -80 });
-      tone(440, 0.22, { type: "square", vol: 0.28, slide: -120, delay: 0.13 });
-      tone(150, 0.45, { vol: 0.55, slide: -80 });
-      noise(0.3, { vol: 0.4, freq: 1100 });
+      tone(320, 0.22, { vol: 0.4, slide: -200 });
+      noise(0.16, { vol: 0.25, freq: 900 });
     },
-    /* レベルアップ: 上昇するアルペジオ */
+    /* レベルアップ: 長三和音のアルペジオ + きらめき */
     levelUp() {
-      [330, 415, 494, 659].forEach((f, i) =>
-        tone(f, 0.22, { type: "triangle", vol: 0.25, delay: i * 0.09 }));
+      melody([72, 76, 79, 84], 0.08, 0.25, { type: "triangle", vol: 0.25 });
+      tone(1568, 0.5, { type: "sine", vol: 0.12, slide: 500, delay: 0.3 });
     },
-    /* ゲームオーバー: 下降する4音 */
-    gameOver() {
-      [392, 311, 233, 155].forEach((f, i) =>
-        tone(f, 0.34, { type: "triangle", vol: 0.3, delay: 0.25 + i * 0.18 }));
+    /* コンボ節目: 高い完全五度の2音 */
+    comboMilestone() {
+      melody([88, 95], 0.07, 0.18, { type: "square", vol: 0.12 });
+    },
+    /* ラストスパートの秒カウント */
+    timeTick() { tone(1320, 0.05, { type: "triangle", vol: 0.16 }); },
+    /* 時間切れ: 上昇して終わる明るいジングル */
+    timeUp() {
+      melody([67, 72, 76, 79], 0.12, 0.3, { type: "triangle", vol: 0.28, delay: 0.15 });
+      [72, 76, 79, 84].forEach((m) => tone(midiHz(m), 0.9, { type: "triangle", vol: 0.12, delay: 0.65 }));
+    },
+    /* 記録更新: 駆け上がるきらめき */
+    newRecord() {
+      melody([79, 81, 83, 84, 86, 88, 91], 0.05, 0.25, { type: "triangle", vol: 0.14, delay: 1.4 });
     },
   };
 })();
 
 /* ============================================================
-   BGM: Web Audio APIによる地球防衛テーマ(音源ファイルなし・手続き生成)
-   構成: 8分刻みのパルスベース + 軽量ドラム(キック/スネア/ハット)
-       + 鋸波パッドのコード + 疾走するアルペジオ(残響つき)
+   BGM: Web Audio APIによるチップチューン(音源ファイルなし・手続き生成)
+   構成: 25%パルス波のリード + 三角波ベース(オクターブ跳躍)
+       + 16分で回る矩形波のチップコード + ノイズ打楽器(キック/スネア/ハット)
    setTimeoutのドリフトを避けるため、AudioContextのcurrentTimeを
    基準にした先読みスケジューラで正確な時刻に発音を予約する。
    AudioContextはSFXと共有し、二重生成しない。
    ============================================================ */
 const BGM = (() => {
-  /* --- 曲定義: Aマイナー 8小節の勇壮な進行 ---
-     Am | F | C | G | Am | F | Dm | E
-     前半は王道の高揚感、後半の Dm→E(和声的短音階)が緊張と使命感を
-     作って Am の頭へ強く戻る。midiノート番号で記述(69 = A4 = 440Hz) */
-  const BARS = [
-    { bass: 33, chord: [57, 60, 64], arp: [57, 60, 64, 69] }, // Am
-    { bass: 29, chord: [53, 57, 60], arp: [53, 57, 60, 65] }, // F
-    { bass: 36, chord: [55, 60, 64], arp: [55, 60, 64, 67] }, // C
-    { bass: 31, chord: [55, 59, 62], arp: [55, 59, 62, 67] }, // G
-    { bass: 33, chord: [57, 60, 64], arp: [57, 60, 64, 69] }, // Am
-    { bass: 29, chord: [53, 57, 60], arp: [53, 57, 60, 65] }, // F
-    { bass: 38, chord: [57, 62, 65], arp: [57, 62, 65, 69] }, // Dm
-    { bass: 40, chord: [56, 59, 64], arp: [56, 59, 64, 68] }, // E
+  /* --- 曲定義: Cメジャー 8小節の王道進行を2周(16小節)。
+     C | G | Am | F | C | G | F | G  midiノート番号で記述 --- */
+  const CHORDS = [
+    { bass: 36, tones: [60, 64, 67] }, // C
+    { bass: 43, tones: [59, 62, 67] }, // G
+    { bass: 45, tones: [60, 64, 69] }, // Am
+    { bass: 41, tones: [60, 65, 69] }, // F
+    { bass: 36, tones: [60, 64, 67] }, // C
+    { bass: 43, tones: [59, 62, 67] }, // G
+    { bass: 41, tones: [60, 65, 69] }, // F
+    { bass: 43, tones: [59, 62, 67] }, // G
+  ];
+  /* リード: 1小節=8分×8。数値=発音、"-"=前の音を伸ばす、null=休符 */
+  const MELODY = [
+    [76, 76, 79, "-", 76, 74, 72, "-"],
+    [74, 74, 79, "-", 74, 72, 71, "-"],
+    [72, 72, 76, "-", 81, 79, 76, "-"],
+    [77, 76, 74, 76, 77, "-", 79, "-"],
+    [79, "-", 76, 72, 76, 79, 84, "-"],
+    [83, "-", 79, 74, 79, 83, 86, "-"],
+    [84, 81, 77, 81, 84, "-", 81, 79],
+    [79, "-", 83, "-", 84, "-", "-", null],
+    [76, 76, 79, "-", 76, 74, 72, "-"],
+    [74, 74, 79, "-", 74, 72, 71, "-"],
+    [72, 72, 76, "-", 81, 79, 76, "-"],
+    [77, 76, 74, 76, 77, "-", 79, "-"],
+    [84, 83, 81, 79, 76, "-", 79, "-"],
+    [83, 81, 79, 77, 74, "-", 79, "-"],
+    [77, 79, 81, 84, 81, 79, 77, 76],
+    [74, "-", 76, "-", 72, "-", "-", null],
   ];
   const BASS_OCT = [0, 0, 12, 0, 0, 12, 0, 12]; // ベース: 8分ごとのオクターブ跳躍
-  const ARP_PAT = [0, 1, 2, 3, 2, 3, 1, 2];     // アルペジオ: 8分ごとに弾くトーン番号
-  const LOOKAHEAD = 1.2; // 何秒先まで発音を予約するか
-  const TICK_MS = 250;   // スケジューラの起床間隔(ms)。精度には影響しない
-
-  const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const PULSE_DUTY = 0.25;  // リードのパルス幅(25% = 定番のチップ音)
+  const LOOKAHEAD = 1.2;    // 何秒先まで発音を予約するか
+  const TICK_MS = 250;      // スケジューラの起床間隔(ms)。精度には影響しない
 
   let ac = null;        // SFXと共有するAudioContext
   let bus = null;       // BGM全体のゲイン(フェードイン/アウト用)
-  let delaySend = null; // アルペジオの残響(ディレイ)への送り口
+  let delaySend = null; // リードの残響(ディレイ)への送り口
+  let leadOut = null;   // リードの出力(ローパス→bus、少量を残響へ)
+  let pulseWave = null; // 25%パルス波(PeriodicWave)。一度作れば使い回す
   let noiseBuf = null;  // ハット/スネア用の共有ノイズバッファ(毎回作らない)
   let timer = null;
   let running = false;
   let barIdx = 0;
   let nextBarTime = 0;
 
-  /* レベル追従: 高レベルほど「わずかに」速く・明るく・リズムが密になる。
+  /* レベル追従: 高レベルほど速く・リズムが密に。ラストスパートでさらに加速。
      値は小節の境界でしか反映されないため急変しない */
   function mood() {
     const lv = Math.min(game.level, CONFIG.BGM_LEVEL_CAP) - 1;
+    const bpm = CONFIG.BGM_BPM + lv * CONFIG.BGM_BPM_PER_LEVEL +
+      (game.spurt ? CONFIG.BGM_SPURT_BPM_ADD : 0);
     return {
-      spb: 60 / (CONFIG.BGM_BPM + lv), // 1拍の秒数。レベルごとにBPM+1
-      cutoff: 1300 + lv * 110,         // パッドのローパス周波数(明るさ)
-      drive: Math.min(lv / 6, 1),      // 追加キック/裏ハットの音量係数(0→1)
+      spb: 60 / bpm,                // 1拍の秒数
+      drive: Math.min(lv / 6, 1),   // 追加キック/16分ハットの音量係数(0→1)
     };
   }
 
@@ -1138,18 +1403,34 @@ const BGM = (() => {
     bus.gain.value = 0.0001;
     bus.connect(ac.destination);
     const delay = ac.createDelay(1.0);
-    delay.delayTime.value = 0.4; // 付点8分相当。テンポ変化に合わせ毎小節微調整
+    delay.delayTime.value = 0.34; // 付点8分相当。テンポ変化に合わせ毎小節微調整
     const damp = ac.createBiquadFilter();
     damp.type = "lowpass";
-    damp.frequency.value = 2400; // 繰り返すほど残響が丸くなる
+    damp.frequency.value = 2600; // 繰り返すほど残響が丸くなる
     const fb = ac.createGain();
-    fb.gain.value = 0.3;         // 残響のフィードバック量
+    fb.gain.value = 0.28;        // 残響のフィードバック量
     const wet = ac.createGain();
-    wet.gain.value = 0.4;        // 残響の返し量
+    wet.gain.value = 0.35;       // 残響の返し量
     delay.connect(damp);
     damp.connect(fb).connect(delay); // フィードバックループ
     delay.connect(wet).connect(bus);
     delaySend = delay;
+    /* リード: 高域を少し丸めてから出す。残響へは控えめに送る */
+    leadOut = ac.createBiquadFilter();
+    leadOut.type = "lowpass";
+    leadOut.frequency.value = 5200;
+    leadOut.connect(bus);
+    const send = ac.createGain();
+    send.gain.value = 0.3;
+    leadOut.connect(send).connect(delaySend);
+    if (!pulseWave) {
+      /* 矩形波の各倍音を sin(nπd) で重み付けするとパルス幅 d の波になる */
+      const N = 32;
+      const real = new Float32Array(N);
+      const imag = new Float32Array(N);
+      for (let n = 1; n < N; n++) imag[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * PULSE_DUTY);
+      pulseWave = ac.createPeriodicWave(real, imag);
+    }
     if (!noiseBuf) {
       const len = Math.ceil(ac.sampleRate * 0.25);
       noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
@@ -1165,14 +1446,14 @@ const BGM = (() => {
     if (vol < 0.01) return; // 音量ゼロ相当はノード自体を作らない(低レベル時の省負荷)
     const osc = ac.createOscillator();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(150, t);
-    osc.frequency.exponentialRampToValueAtTime(45, t + 0.1);
+    osc.frequency.setValueAtTime(160, t);
+    osc.frequency.exponentialRampToValueAtTime(48, t + 0.09);
     const g = ac.createGain();
     g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
     osc.connect(g).connect(bus);
     osc.start(t);
-    osc.stop(t + 0.16);
+    osc.stop(t + 0.15);
   }
 
   /* ノイズ打楽器: ハット(高域・極短)とスネア(中域・短)を兼ねる */
@@ -1191,83 +1472,84 @@ const BGM = (() => {
     src.stop(t + dur + 0.02);
   }
 
-  /* パルスベース: ローパスした鋸波の短い1音 */
-  function bassNote(t, freq, dur, lp) {
+  /* ベース: 三角波の短い1音(丸くて跳ねる) */
+  function bassNote(t, freq, dur) {
     const osc = ac.createOscillator();
-    osc.type = "sawtooth";
+    osc.type = "triangle";
     osc.frequency.value = freq;
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.3, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(bus);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  /* チップコード: 矩形波の極短音。3声を16分で回して和音に聞かせる */
+  function chordNote(t, freq, dur, lp) {
+    const osc = ac.createOscillator();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.028, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(g).connect(lp);
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
 
-  /* アルペジオ: 三角波の短いプラック。残響へも送る */
-  function arpNote(t, freq, vol) {
+  /* リード: 25%パルス波。素早く立ち上がり、少し減衰して保持する */
+  function leadNote(t, freq, dur) {
     const osc = ac.createOscillator();
-    osc.type = "triangle";
+    osc.setPeriodicWave(pulseWave);
     osc.frequency.value = freq;
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-    osc.connect(g);
-    g.connect(bus);
-    g.connect(delaySend);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.1, t + 0.07);
+    g.gain.setValueAtTime(0.1, t + Math.max(dur - 0.03, 0.08));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(leadOut);
     osc.start(t);
-    osc.stop(t + 0.32);
+    osc.stop(t + dur + 0.02);
   }
 
   /* 1小節(4拍)ぶんをまとめて t0 から予約する。小節の長さ(秒)を返す */
   function scheduleBar(t0) {
-    const { spb, cutoff, drive } = mood();
-    const e8 = spb / 2; // 8分音符の長さ(秒)
-    const bar = BARS[barIdx];
-    const isTurn = barIdx === BARS.length - 1; // E の小節(ループの折り返し)
-    barIdx = (barIdx + 1) % BARS.length;
+    const { spb, drive } = mood();
+    const e8 = spb / 2;  // 8分音符の長さ(秒)
+    const e16 = spb / 4; // 16分音符の長さ(秒)
+    const chord = CHORDS[barIdx % CHORDS.length];
+    const mel = MELODY[barIdx];
+    const isTurn = barIdx === MELODY.length - 1; // ループの折り返し小節
+    barIdx = (barIdx + 1) % MELODY.length;
 
     /* 残響の長さをテンポに追従させる(付点8分) */
     delaySend.delayTime.setTargetAtTime(spb * 0.75, t0, 0.5);
 
-    /* コードパッド: デチューンした鋸波2本×3声。小節を支える土台 */
+    /* リード: "-" が続くぶん音を伸ばす */
+    for (let i = 0; i < 8; i++) {
+      const n = mel[i];
+      if (typeof n !== "number") continue;
+      let len = 1;
+      while (i + len < 8 && mel[i + len] === "-") len++;
+      leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02);
+    }
+
+    /* チップコード: 16分で3声を回す(ローパスで角を取る) */
     const lp = ac.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = cutoff;
-    lp.Q.value = 0.4;
+    lp.frequency.value = 2400;
     lp.connect(bus);
-    for (const m of bar.chord) {
-      for (const det of [-6, 5]) { // 非対称デチューン: うなりで厚みを作る
-        const osc = ac.createOscillator();
-        osc.type = "sawtooth";
-        osc.frequency.value = midiHz(m);
-        osc.detune.value = det;
-        const g = ac.createGain();
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(0.035, t0 + 0.06);
-        g.gain.setValueAtTime(0.035, t0 + spb * 4 - 0.15);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + spb * 4 + 0.25);
-        osc.connect(g).connect(lp);
-        osc.start(t0);
-        osc.stop(t0 + spb * 4 + 0.3);
-      }
+    for (let i = 0; i < 16; i++) {
+      chordNote(t0 + i * e16, midiHz(chord.tones[i % 3]), e16 * 0.9, lp);
     }
 
-    /* ベース: 8分刻みで走るパルス。オクターブ跳躍が推進力を作る */
-    const blp = ac.createBiquadFilter();
-    blp.type = "lowpass";
-    blp.frequency.value = 500;
-    blp.connect(bus);
+    /* ベース: 8分刻みのオクターブ跳躍が推進力を作る */
     for (let i = 0; i < 8; i++) {
-      bassNote(t0 + i * e8, midiHz(bar.bass + BASS_OCT[i]), e8 * 0.95, blp);
-    }
-
-    /* アルペジオ: 8分で駆けるリフ。高レベルほど1オクターブ上が混ざり明るくなる */
-    for (let i = 0; i < 8; i++) {
-      const up = Math.random() < drive * 0.35 ? 12 : 0;
-      arpNote(t0 + i * e8, midiHz(bar.arp[ARP_PAT[i]] + 12 + up), 0.055);
+      bassNote(t0 + i * e8, midiHz(chord.bass + BASS_OCT[i]), e8 * 0.9);
     }
 
     /* ドラム: キックは1・3拍(レベルが上がると2・4拍が加わり四つ打ちへ)、
@@ -1280,7 +1562,7 @@ const BGM = (() => {
       noiseHit(t + spb * 0.25, 0.03 * drive, 7500, 0.03, "highpass");   // 16分ハット
       noiseHit(t + spb * 0.75, 0.03 * drive, 7500, 0.03, "highpass");
     }
-    /* 折り返し小節の終わりに小さなスネアの助走(次のループへの期待感) */
+    /* 折り返し小節の終わりにスネアの助走(次のループへの期待感) */
     if (isTurn) {
       noiseHit(t0 + spb * 3.5, 0.07, 1800, 0.1, "bandpass");
       noiseHit(t0 + spb * 3.75, 0.09, 1800, 0.1, "bandpass");
@@ -1328,17 +1610,18 @@ const BGM = (() => {
     }, fade * 1000 + 100);
   }
 
-  return { start, stop };
+  return { start, stop, bar: () => barIdx };
 })();
 
 /* ============================================================
-   設定: 入力ガイド / 効果音 / BGM のON/OFF(localStorageに保存)
+   設定: 入力ガイド / ヒント / 効果音 / BGM / 開始レベル(localStorageに保存)
    ============================================================ */
 const SETTINGS_KEY = "juni.settings";
-const settings = { guide: true, hint: true, easy: false, sfx: true, bgm: true };
+const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1, practice: false };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
 } catch {}
+delete settings.easy; // 旧バージョンのモード設定は捨てる
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
 }
@@ -1364,39 +1647,59 @@ function recordInput(kana, dir, ok) {
   if (row) stats.rows[row][bucket]++; // 句読点・記号は行の統計に含めない
 }
 
-/* ---- ゲーム状態: スコア・コンボ・ライフ ---- */
+/* ---- ゲーム状態: 時間・レベル・コンボ ---- */
 const game = {
-  score: 0,
   combo: 0,
   maxCombo: 0,
-  lives: CONFIG.LIVES,
   destroyed: 0,
   level: 1,
+  levelKills: 0,  // 現在のレベルで積んだ撃破数(次レベルまでの進行)
+  startLevel: 1,
+  practice: false, // 練習モード: レベル固定・時間無制限・記録なし
+  timeLeft: CONFIG.TIME_LIMIT,
+  elapsed: 0,     // 練習モードの経過秒
+  spurt: false,   // ラストスパート演出に入ったか
   started: false, // スタートボタンを押すまでは動かさない
   over: false,
   paused: false,  // 一時停止・設定画面を開いている間
 };
-let floaters = []; // 獲得スコアのポップアップ
+let floaters = []; // フィールド上に浮かぶ文字(撃破した語・LEVEL UP・COMBO)
 
-const hudScoreEl = document.getElementById("hud-score");
+const hudEl = document.getElementById("hud");
+const hudTimeEl = document.getElementById("hud-time");
+const hudTimeLabelEl = document.getElementById("hud-time-label");
 const hudComboEl = document.getElementById("hud-combo");
 const hudLevelEl = document.getElementById("hud-level");
-const hudLivesEl = document.getElementById("hud-lives");
+const hudProgressEl = document.getElementById("hud-progress");
 const overlayEl = document.getElementById("overlay");
 
-/* コンボ倍率: COMBO_STEP 連鎖ごとに +COMBO_BONUS、上限 COMBO_MULT_MAX */
-function comboMult() {
-  return Math.min(
-    1 + Math.floor(game.combo / CONFIG.COMBO_STEP) * CONFIG.COMBO_BONUS,
-    CONFIG.COMBO_MULT_MAX);
+/* 数字が増えた瞬間に弾ませる(Web Animations。クラスの付け外しより単純) */
+function bump(el, scale = 1.35) {
+  el.animate([{ transform: `scale(${scale})` }, { transform: "scale(1)" }],
+    { duration: 180, easing: "ease-out" });
 }
 
 function updateHud() {
-  hudScoreEl.textContent = game.score;
   hudComboEl.textContent = game.combo;
   hudLevelEl.textContent = game.level;
-  hudLivesEl.textContent =
-    "◆".repeat(game.lives) + "◇".repeat(CONFIG.LIVES - game.lives);
+  hudProgressEl.style.width =
+    `${Math.min(game.levelKills / killsToNext(game.level), 1) * 100}%`;
+}
+
+let shownSec = -1;      // 表示中の残り秒(毎フレームのDOM更新を避ける)
+let shownWarn = false;  // 赤点滅の表示状態
+function updateTimer() {
+  /* 練習モードは経過秒を数え上げる。通常は残り秒を数え下げる */
+  const sec = game.practice ? Math.floor(game.elapsed) : Math.max(0, Math.ceil(game.timeLeft));
+  const warn = game.spurt && !game.over;
+  if (sec !== shownSec) {
+    shownSec = sec;
+    hudTimeEl.textContent = sec;
+  }
+  if (warn !== shownWarn) {
+    shownWarn = warn;
+    hudTimeEl.classList.toggle("warn", warn);
+  }
 }
 
 /* ターゲティング: ロック中はその隕石だけが対象。
@@ -1422,6 +1725,14 @@ function handleGameInput(token) {
   game.combo++;
   game.maxCombo = Math.max(game.maxCombo, game.combo);
   SFX.tick(game.combo);
+  bump(hudComboEl, 1.25);
+  if (game.combo % CONFIG.COMBO_MILESTONE === 0) {
+    floaters.push({
+      x: fieldW / 2, y: fieldH * 0.28, text: `${game.combo} COMBO!`,
+      t: 0, life: 1.2, kind: "combo",
+    });
+    SFX.comboMilestone();
+  }
   target.charProg++;
   if (target.charProg >= target.chars[target.charIdx].tokens.length) {
     target.charIdx++;
@@ -1449,42 +1760,51 @@ function onMiss(token) {
 }
 
 function onDestroy(meteor) {
-  const gained = Math.round(
-    meteor.word.actions * CONFIG.SCORE_PER_ACTION * comboMult() *
-    (settings.easy ? CONFIG.EASY_SCORE : 1));
-  game.score += gained;
   game.destroyed++;
-  floaters.push({ x: meteor.x, y: meteor.y, text: `+${gained}`, t: 0, life: 0.9 });
-  while (game.destroyed >= killsNeededFor(game.level + 1)) {
+  /* 撃破した語の表記(漢字)を浮かせる。読みしかない語は読みを出す */
+  floaters.push({
+    x: meteor.x, y: meteor.y, text: meteor.word.display ?? meteor.word.reading,
+    t: 0, life: 0.9, kind: "word",
+  });
+  if (game.practice) return; // 練習モードはレベル固定
+  game.levelKills++;
+  while (game.levelKills >= killsToNext(game.level)) {
+    game.levelKills -= killsToNext(game.level);
     game.level++;
-    const sub = game.level <= LEVELS.length
-      ? LEVELS[game.level - 1].label
-      : "さらに加速";
     floaters.push({
-      x: fieldW / 2, y: fieldH * 0.35,
-      text: `LEVEL ${game.level}`, sub,
-      t: 0, life: 1.8, big: true,
+      x: fieldW / 2, y: fieldH * 0.38,
+      text: `LEVEL ${game.level}`, sub: levelLabel(game.level),
+      t: 0, life: 1.8, kind: "level",
     });
+    spawnRing(CONFIG.RING_PARTICLES);
     SFX.levelUp();
+    bump(hudLevelEl, 1.5);
   }
 }
 
+/* 着地: ライフはない。画面が揺れてコンボが切れるだけ */
 function onLanded(meteor) {
   dangerFlash = 1;
-  game.lives--;
+  shake = CONFIG.SHAKE_AMP;
+  game.combo = 0;
   SFX.land();
   updateHud();
-  if (game.lives <= 0) gameOver();
 }
 
-const HISCORE_KEY = "juni.highscore";
-
-function loadHighscore() {
-  try { return Number(localStorage.getItem(HISCORE_KEY)) || 0; }
-  catch { return 0; } // プライベートモード等でlocalStorage不可
+/* ---- 記録: 自己ベスト(到達レベル・撃破数・最大コンボ) ---- */
+const BEST_KEY = "juni.best";
+function loadBest() {
+  try {
+    const b = JSON.parse(localStorage.getItem(BEST_KEY));
+    return { level: 0, destroyed: 0, maxCombo: 0, ...(b ?? {}) };
+  } catch { return { level: 0, destroyed: 0, maxCombo: 0 }; } // プライベートモード等
 }
-function saveHighscore(v) {
-  try { localStorage.setItem(HISCORE_KEY, String(v)); } catch {}
+function saveBest(b) {
+  try { localStorage.setItem(BEST_KEY, JSON.stringify(b)); } catch {}
+}
+/* 到達レベル → ランク文字 */
+function rankFor(level) {
+  return (CONFIG.RANKS.find(([min]) => level >= min) ?? CONFIG.RANKS.at(-1))[1];
 }
 
 /* 正答率(%)。試行がなければ null */
@@ -1497,7 +1817,13 @@ function statCell(label, value, cls) {
   return `<div class="cell ${cls}">${label}<b>${value}</b></div>`;
 }
 
-/* 成長の記録: ゲームごとの行別正答率を残す(直近20回) */
+/* 前回比の矢印HTML。比較できなければ空 */
+function arrowHtml(cur, prev) {
+  if (cur == null || prev == null || cur === prev) return "";
+  return cur > prev ? '<i class="up">↑</i>' : '<i class="down">↓</i>';
+}
+
+/* 成長の記録: ゲームごとの結果と行別正答率を残す(直近20回) */
 const HISTORY_KEY = "juni.history";
 function loadHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) ?? []; }
@@ -1512,11 +1838,7 @@ function renderResultStats(prev) {
   document.getElementById("go-rows").innerHTML = ALL_ROWS.map((r) => {
     const acc = accuracy(stats.rows[r]);
     const cls = acc === null ? "na" : acc < 70 ? "bad" : acc < 90 ? "warn" : "";
-    let arrow = "";
-    const prevAcc = prev?.rows?.[r];
-    if (acc !== null && prevAcc != null && acc !== prevAcc) {
-      arrow = acc > prevAcc ? '<i class="up">↑</i>' : '<i class="down">↓</i>';
-    }
+    const arrow = acc === null ? "" : arrowHtml(acc, prev?.rows?.[r]);
     return statCell(r, acc === null ? "—" : `${acc}%${arrow}`, cls);
   }).join("");
 
@@ -1535,35 +1857,74 @@ function renderResultStats(prev) {
   ].join("");
 }
 
-function gameOver() {
+/* 終了: 結果を集計してリザルトを出す。
+   通常は時間切れで呼ばれ、記録(自己ベスト・履歴)を更新する。
+   練習モードは一時停止メニューから呼ばれ、記録は残さず統計だけ見せる */
+function finishGame() {
   game.over = true;
-  SFX.gameOver();
+  hudTimeEl.classList.remove("warn");
+  SFX.timeUp();
   BGM.stop(); // ジングルの邪魔をしないようフェードアウト
-  const best = loadHighscore();
-  const isNewBest = game.score > best;
-  if (isNewBest) saveHighscore(game.score);
-  document.getElementById("go-score").textContent = game.score;
-  document.getElementById("go-best").textContent = Math.max(best, game.score);
-  document.getElementById("go-newbest").classList.toggle("hidden", !isNewBest);
-  document.getElementById("go-combo").textContent = game.maxCombo;
-  document.getElementById("go-destroyed").textContent = game.destroyed;
+  overlayEl.classList.toggle("practice", game.practice);
+  document.getElementById("go-hero").classList.toggle("practice", game.practice);
+  document.getElementById("go-title").textContent = game.practice ? "おつかれさま" : "TIME UP!";
+  document.getElementById("go-level-label").textContent = game.practice ? "練習したレベル" : "到達レベル";
   document.getElementById("go-level").textContent = game.level;
+
+  if (game.practice) {
+    document.getElementById("go-newbest").classList.add("hidden");
+    document.getElementById("go-destroyed").textContent = game.destroyed;
+    document.getElementById("go-combo").textContent = game.maxCombo;
+    renderResultStats(loadHistory().at(-1) ?? null); // 前回の本番との比較は出す
+    overlayEl.classList.remove("hidden");
+    return;
+  }
+
+  const best = loadBest();
+  const isNewBest = game.level > best.level ||
+    (game.level === best.level && game.destroyed > best.destroyed);
+  const nextBest = {
+    level: isNewBest ? game.level : best.level,
+    destroyed: isNewBest ? game.destroyed : best.destroyed,
+    maxCombo: Math.max(best.maxCombo, game.maxCombo),
+  };
+  saveBest(nextBest);
   const history = loadHistory();
-  renderResultStats(history.at(-1) ?? null);
+  const prev = history.at(-1) ?? null;
+  document.getElementById("go-rank").textContent = rankFor(game.level);
+  document.getElementById("go-newbest").classList.toggle("hidden", !isNewBest);
+  document.getElementById("go-best").textContent = `LEVEL ${nextBest.level}`;
+  document.getElementById("go-destroyed").innerHTML =
+    `${game.destroyed}${arrowHtml(game.destroyed, prev?.destroyed)}`;
+  document.getElementById("go-combo").innerHTML =
+    `${game.maxCombo}${arrowHtml(game.maxCombo, prev?.maxCombo)}`;
+  renderResultStats(prev);
   history.push({
     t: Date.now(),
-    score: game.score,
+    level: game.level,
+    destroyed: game.destroyed,
+    maxCombo: game.maxCombo,
     rows: Object.fromEntries(ALL_ROWS.map((r) => [r, accuracy(stats.rows[r])])),
   });
   saveHistory(history);
+  if (isNewBest) {
+    spawnConfetti(CONFIG.CONFETTI);
+    SFX.newRecord();
+  }
   overlayEl.classList.remove("hidden");
 }
 
 function restart() {
   Object.assign(game, {
-    score: 0, combo: 0, maxCombo: 0, lives: CONFIG.LIVES,
-    destroyed: 0, level: 1, started: true, over: false, paused: false,
+    combo: 0, maxCombo: 0, destroyed: 0,
+    level: settings.startLevel, levelKills: 0, startLevel: settings.startLevel,
+    practice: settings.practice,
+    timeLeft: CONFIG.TIME_LIMIT, elapsed: 0, spurt: false,
+    started: true, over: false, paused: false,
   });
+  hudEl.classList.toggle("practice", game.practice);
+  hudTimeLabelEl.textContent = game.practice ? "PRACTICE" : "TIME";
+  pauseFinishEl.classList.toggle("hidden", !game.practice);
   meteors = [];
   particles = [];
   floaters = [];
@@ -1571,33 +1932,105 @@ function restart() {
   stats = newStats();
   recentWords = [];
   spawnTimer = CONFIG.SPAWN_INTERVAL;
+  shake = 0;
+  dangerFlash = 0;
+  sky = skyTarget().map((c) => [...c]); // 開始レベルの空色から始める
   overlayEl.classList.add("hidden");
   if (settings.bgm) BGM.start(); // リトライ(ユーザー操作)の中でBGMを再開
   updateHud();
+  shownSec = -1;
+  updateTimer();
 }
 /* 状態を全リセットしてタイトル画面に戻る */
 function goToTitle() {
   restart();             // リセット(各オーバーレイも閉じる)
   game.started = false;  // タイトル画面で待機
+  renderLevelPicker();   // 直前のプレイで解放レベルが増えていれば反映
   document.getElementById("start").classList.remove("hidden");
 }
 document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
   goToTitle();
 });
-updateHud();
 
-/* ---- スタート画面: ボタンを押して開始(この操作でオーディオも起動) ---- */
+/* ---- スタート画面: 開始レベル選択 + ボタンで開始(この操作でオーディオも起動) ---- */
 const startEl = document.getElementById("start");
-document.getElementById("btn-start").addEventListener("click", () => {
+const pickerEl = document.getElementById("level-picker");
+const levelDescEl = document.getElementById("level-desc");
+const startBestEl = document.getElementById("start-best");
+
+/* 解放されている最大の開始レベル。自己ベスト − OFFSET(最低1・上限なし) */
+function maxStartLevel() {
+  return Math.max(1, loadBest().level - CONFIG.START_LEVEL_UNLOCK_OFFSET);
+}
+
+function renderLevelPicker() {
+  const unlocked = maxStartLevel();
+  settings.startLevel = Math.min(Math.max(settings.startLevel, 1), unlocked);
+  pickerEl.innerHTML = "";
+  /* 最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
+  const shown = Math.max(CONFIG.START_LEVEL_SHOWN, unlocked);
+  let activeEl = null;
+  for (let lv = 1; lv <= shown; lv++) {
+    const b = document.createElement("button");
+    b.className = "lv" + (lv > unlocked ? " locked" : "") + (lv === settings.startLevel ? " active" : "");
+    b.dataset.level = lv;
+    b.textContent = lv;
+    if (lv > unlocked) b.disabled = true;
+    if (lv === settings.startLevel) activeEl = b;
+    pickerEl.appendChild(b);
+  }
+  activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
+  /* スクロールが生じるときだけ右余白を取る(スクロールバーと番号の重なり防止) */
+  pickerEl.classList.toggle("scrolls", pickerEl.scrollHeight > pickerEl.clientHeight + 1);
+  levelDescEl.textContent = `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)}`;
+  const best = loadBest();
+  startBestEl.textContent = best.level ? `LEVEL ${best.level}` : "—";
+  /* タイトル待機中は背後のHUDと空色も選んだレベルに追従させる */
+  if (!game.started) {
+    game.level = settings.startLevel;
+    updateHud();
+  }
+}
+pickerEl.addEventListener("click", (e) => {
+  const b = e.target.closest(".lv");
+  if (!b || b.disabled) return;
+  settings.startLevel = Number(b.dataset.level);
+  saveSettings();
+  renderLevelPicker();
+});
+renderLevelPicker();
+sky = skyTarget().map((c) => [...c]); // 起動直後は空色をなじませず即座に合わせる
+updateTimer();
+
+/* 練習モードのトグル: レベル固定・時間無制限・記録なし */
+const stPracticeEl = document.getElementById("st-practice");
+const btnStartEl = document.getElementById("btn-start");
+function syncPractice() {
+  stPracticeEl.checked = settings.practice;
+  btnStartEl.textContent = settings.practice ? "練習スタート" : "スタート";
+}
+stPracticeEl.addEventListener("change", () => {
+  settings.practice = stPracticeEl.checked;
+  saveSettings();
+  syncPractice();
+});
+syncPractice();
+
+btnStartEl.addEventListener("click", () => {
   SFX.ensure();
-  if (settings.bgm) BGM.start();
-  game.started = true;
+  restart();
   startEl.classList.add("hidden");
 });
 
-/* ---- 一時停止: 再開 or 最初からやり直す ---- */
+/* ---- 一時停止: 再開 / (練習のみ)終了して結果 / 最初からやり直す ---- */
 const pauseEl = document.getElementById("pause");
+const pauseFinishEl = document.getElementById("btn-pause-finish");
+pauseFinishEl.addEventListener("click", () => {
+  pauseEl.classList.add("hidden");
+  game.paused = false;
+  finishGame();
+});
 document.getElementById("btn-pause").addEventListener("click", () => {
   if (!game.started || game.over) return;
   game.paused = true;
@@ -1641,28 +2074,6 @@ stHintEl.addEventListener("change", () => {
   settings.hint = stHintEl.checked;
   saveSettings();
 });
-
-/* ---- モード選択タブ: スタート画面とリザルト画面で共通 ---- */
-const MODE_DESC = {
-  normal: "", // ノーマルは説明なし
-  easy: "落下がゆっくり、隕石も少なめの練習モード。",
-};
-function syncModeTabs() {
-  const mode = settings.easy ? "easy" : "normal";
-  document.querySelectorAll(".mode-tab").forEach((b) =>
-    b.classList.toggle("active", b.dataset.mode === mode));
-  document.querySelectorAll(".mode-desc").forEach((p) =>
-    p.textContent = MODE_DESC[mode]);
-  /* プレー中もどのモードかHUDで分かるように(ノーマル時は非表示) */
-  document.getElementById("hud-mode").classList.toggle("hidden", !settings.easy);
-}
-document.querySelectorAll(".mode-tab").forEach((b) =>
-  b.addEventListener("click", () => {
-    settings.easy = b.dataset.mode === "easy";
-    saveSettings();
-    syncModeTabs();
-  }));
-syncModeTabs();
 stSfxEl.addEventListener("change", () => {
   settings.sfx = stSfxEl.checked;
   SFX.setMuted(!settings.sfx);
@@ -1682,13 +2093,34 @@ stBgmEl.addEventListener("change", () => {
 /* ---- 更新と描画 ---- */
 function update(dt) {
   if (game.started && !game.over && !game.paused) {
+    if (game.practice) {
+      game.elapsed += dt; // 練習モード: 時間無制限。経過だけ数える
+    } else {
+      /* 残り時間。ラストスパート突入は1回だけ、秒が変わるごとにカウント音 */
+      const prevSec = Math.ceil(game.timeLeft);
+      game.timeLeft -= dt;
+      const sec = Math.ceil(game.timeLeft);
+      if (!game.spurt && game.timeLeft <= CONFIG.LAST_SPURT) {
+        game.spurt = true;
+        floaters.push({
+          x: fieldW / 2, y: fieldH * 0.28, text: `ラスト${CONFIG.LAST_SPURT}秒！`,
+          t: 0, life: 1.4, kind: "spurt",
+        });
+      }
+      if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
+      if (game.timeLeft <= 0) {
+        game.timeLeft = 0;
+        finishGame();
+      }
+    }
+
     spawnTimer += dt;
     const interval = Math.max(
-      CONFIG.SPAWN_INTERVAL * spawnScale(), CONFIG.SPAWN_INTERVAL_MIN) *
-      (settings.easy ? CONFIG.EASY_SPAWN : 1);
-    /* 場が空なら間隔を待たずに即出す(隕石ゼロの手持ち無沙汰を作らない) */
-    if (meteors.length === 0 ||
-        (spawnTimer >= interval && meteors.length < CONFIG.METEOR_MAX)) {
+      CONFIG.SPAWN_INTERVAL * spawnScale(), CONFIG.SPAWN_INTERVAL_MIN);
+    /* 場が薄ければ間隔を待たずに補充する(1分間、手持ち無沙汰を作らない) */
+    const short = meteors.length < CONFIG.METEOR_MIN && spawnTimer >= CONFIG.SPAWN_MIN_GAP;
+    if (!game.over && (meteors.length === 0 || short ||
+        (spawnTimer >= interval && meteors.length < CONFIG.METEOR_MAX))) {
       spawnTimer = 0;
       spawnMeteor();
     }
@@ -1716,6 +2148,12 @@ function update(dt) {
   }
   floaters = floaters.filter((f) => f.t < f.life);
   dangerFlash = Math.max(0, dangerFlash - dt * 1.5);
+  shake = Math.max(0, shake - dt * CONFIG.SHAKE_DECAY);
+  /* 空の色を目標へなじませる */
+  const tg = skyTarget();
+  const k = Math.min(1, dt * CONFIG.SKY_LERP);
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) sky[i][j] += (tg[i][j] - sky[i][j]) * k;
+  updateTimer();
 }
 
 function drawMeteor(m) {
@@ -1735,17 +2173,17 @@ function drawMeteor(m) {
     i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
   }
   ctx.closePath();
-  ctx.shadowColor = "rgba(255, 140, 60, 0.55)";
-  ctx.shadowBlur = 16;
-  ctx.fillStyle = "#3a3550";
+  ctx.shadowColor = PALETTE.METEOR_GLOW;
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = PALETTE.METEOR_BODY;
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = "#584f78";
+  ctx.strokeStyle = PALETTE.METEOR_EDGE;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   /* クレーター */
-  ctx.fillStyle = "rgba(20, 18, 38, 0.5)";
+  ctx.fillStyle = PALETTE.CRATER;
   for (let i = 0; i < 3; i++) {
     ctx.beginPath();
     ctx.arc(
@@ -1756,7 +2194,7 @@ function drawMeteor(m) {
   }
 
   /* ヒビ: 消した文字数ぶん放射状に */
-  ctx.strokeStyle = "rgba(255, 180, 84, 0.7)";
+  ctx.strokeStyle = PALETTE.CRACK;
   ctx.lineWidth = 1.2;
   for (let c = 0; c < m.charIdx; c++) {
     const a0 = m.seeds[c % 8] * Math.PI * 2;
@@ -1778,7 +2216,7 @@ function drawMeteor(m) {
     const bx = m.rx + pad;
     const by = m.ry + pad;
     const arm = 12;
-    ctx.strokeStyle = "#ffb454";
+    ctx.strokeStyle = PALETTE.LOCK;
     ctx.globalAlpha = 0.55 + 0.45 * Math.sin(lastTime / 1000 * 6);
     ctx.lineWidth = 2;
     for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
@@ -1791,7 +2229,7 @@ function drawMeteor(m) {
     ctx.globalAlpha = 1;
   }
 
-  /* 残りの読み: 次に打つ文字をハイライト、残りはグレー */
+  /* 残りの読み: 次に打つ文字をハイライト、残りは淡く */
   ctx.font = METEOR_FONT_STR;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1800,25 +2238,33 @@ function drawMeteor(m) {
   for (let i = m.charIdx; i < m.word.len; i++) {
     const ch = displayChar(m, i);
     ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(10, 13, 30, 0.85)";
+    ctx.strokeStyle = PALETTE.CHAR_OUTLINE;
     ctx.strokeText(ch, tx, 0);
-    ctx.fillStyle = i === m.charIdx ? "#ffb454" : "#9aa2c0";
+    ctx.fillStyle = i === m.charIdx ? PALETTE.CHAR_NEXT : PALETTE.CHAR_REST;
     ctx.fillText(ch, tx, 0);
     tx += CHAR_ADVANCE;
   }
   ctx.restore();
 }
 
+const FONT_UI = "'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif";
+const FONT_DISPLAY = "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif";
+
 function draw() {
   const grad = ctx.createLinearGradient(0, 0, 0, fieldH);
-  grad.addColorStop(0, "#0a0d1e");
-  grad.addColorStop(1, "#131a38");
+  grad.addColorStop(0, rgbStr(sky[0]));
+  grad.addColorStop(1, rgbStr(sky[1]));
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, fieldW, fieldH);
 
-  ctx.fillStyle = "#e9e4d6";
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() * 2 - 1) * shake, (Math.random() * 2 - 1) * shake);
+
+  /* 星: それぞれの位相で瞬く */
+  const now = lastTime / 1000;
+  ctx.fillStyle = PALETTE.STAR;
   for (const s of stars) {
-    ctx.globalAlpha = s.a;
+    ctx.globalAlpha = s.a * (0.65 + 0.35 * Math.sin(now * s.sp + s.ph));
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
     ctx.fill();
@@ -1839,24 +2285,32 @@ function draw() {
   ctx.textAlign = "center";
   for (const f of floaters) {
     ctx.globalAlpha = 1 - f.t / f.life;
-    ctx.fillStyle = "#ffb454";
-    if (f.big) {
-      ctx.font = "28px 'Hiragino Mincho ProN', 'Yu Mincho', serif";
+    if (f.kind === "level") {
+      ctx.fillStyle = PALETTE.FLOAT_LEVEL;
+      ctx.font = `32px ${FONT_DISPLAY}`;
       ctx.fillText(f.text, f.x, f.y);
       if (f.sub) {
-        ctx.font = "13px 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif";
-        ctx.fillStyle = "#9aa2c0";
+        ctx.font = `13px ${FONT_UI}`;
+        ctx.fillStyle = PALETTE.FLOAT_SUB;
         ctx.fillText(f.sub, f.x, f.y + 24);
       }
+    } else if (f.kind === "combo" || f.kind === "spurt") {
+      /* 出た瞬間に少し大きく、すぐ定位置へ縮む */
+      const pop = 1 + Math.max(0, 0.25 - f.t) * 2;
+      ctx.fillStyle = f.kind === "combo" ? PALETTE.FLOAT_COMBO : PALETTE.FLOAT_SPURT;
+      ctx.font = `800 ${Math.round(22 * pop)}px ${FONT_UI}`;
+      ctx.fillText(f.text, f.x, f.y);
     } else {
-      ctx.font = "bold 15px 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif";
+      ctx.fillStyle = PALETTE.FLOAT_WORD;
+      ctx.font = `bold 16px ${FONT_UI}`;
       ctx.fillText(f.text, f.x, f.y);
     }
   }
   ctx.globalAlpha = 1;
+  ctx.restore();
 
-  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したらライフ-1 */
-  ctx.fillStyle = `rgba(255, 180, 84, ${0.35 + dangerFlash * 0.65})`;
+  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したらコンボが切れる */
+  ctx.fillStyle = `rgba(${PALETTE.DANGER_RGB}, ${0.35 + dangerFlash * 0.65})`;
   const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
   ctx.fillRect(0, fieldH - lh, fieldW, lh);
 }
@@ -1949,7 +2403,7 @@ function highlightGuide(g, dir) {
 
 padEl.addEventListener("pointerdown", (e) => {
   SFX.ensure(); // AudioContextはユーザー操作の中でしか起こせない
-  if (settings.bgm) BGM.start(); // 初回タッチでBGM開始(再生中の呼び出しは何もしない)
+  if (settings.bgm && game.started && !game.over) BGM.start(); // 初回タッチでBGM開始(再生中の呼び出しは何もしない)
   const key = e.target.closest(".key");
   if (!key) return;
   key.setPointerCapture(e.pointerId);

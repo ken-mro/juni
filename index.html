@@ -718,9 +718,10 @@ const CONFIG = {
   SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
 
   /* 開始レベル選択(テトリス方式)。解放上限 = 自己ベスト到達レベル − OFFSET(上限なし)。
+     OFFSET 0 = 到達したレベルからすぐ再挑戦できる。
      選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
   START_LEVEL_SHOWN: 10,
-  START_LEVEL_UNLOCK_OFFSET: 1,
+  START_LEVEL_UNLOCK_OFFSET: 0,
 
   /* ランク: 到達レベルがしきい値以上なら、その文字。上から順に判定 */
   RANKS: [[9, "S"], [7, "A"], [5, "B"], [3, "C"], [1, "D"]],

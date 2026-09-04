@@ -47,8 +47,9 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 - **ライフもスコアもない**。ミス入力も隕石の着地もコンボリセットのみ（着地は画面揺れ付き）。終了条件は `TIME_LIMIT` の時間切れだけ
 - **場の補充**: 隕石が `METEOR_MIN` 未満なら出現間隔を待たずに補充する（`SPAWN_MIN_GAP` は空ける）。1分間の手持ち無沙汰を作らないための仕様
 - **開始レベル**: タイトルで選択。解放上限は `juni.best.level − START_LEVEL_UNLOCK_OFFSET`（既定 OFFSET=0 で到達レベルをそのまま選べる。最低1、上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロールする。`restart()` は `settings.startLevel` から始める
+- **練習モード**（`settings.practice` → `game.practice`）: レベル固定（`onDestroy` でレベルアップしない）・時間無制限（`game.elapsed` を数え上げ）・記録なし。終了は一時停止メニューの「終了して結果を見る」→ `finishGame()`。`finishGame()` は通常の時間切れと共通で、練習時は自己ベスト・履歴を更新せず、ランク/記録更新/自己ベスト行を隠す
 - **リセットの範囲**: `restart()`/`goToTitle()` はそのプレイ1回分の状態を全消去するが、自己ベスト・成長記録・設定は残す
-- **localStorage キー**: `juni.best`（level, destroyed, maxCombo）/ `juni.settings`（guide, hint, sfx, bgm, startLevel）/ `juni.history`（直近20ゲームの level, destroyed, maxCombo と行別正答率。リザルトの前回比↑↓に使用）。旧 `juni.highscore` と `settings.easy` は読まない
+- **localStorage キー**: `juni.best`（level, destroyed, maxCombo）/ `juni.settings`（guide, hint, sfx, bgm, startLevel, practice）/ `juni.history`（直近20ゲームの level, destroyed, maxCombo と行別正答率。リザルトの前回比↑↓に使用）。旧 `juni.highscore` と `settings.easy` は読まない
 - 画面遷移はタイトル経由に統一: TIME UP「もう一度」も一時停止「やり直す」もタイトル画面へ戻る
 
 ## 進め方（このリポジトリでの合意事項）

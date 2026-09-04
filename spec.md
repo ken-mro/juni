@@ -137,6 +137,10 @@ function analyze(kana) {
 
 タイトル画面で開始レベルを選べる。解放上限は **自己ベスト到達レベル − `START_LEVEL_UNLOCK_OFFSET`**（既定は 0 = 到達したレベルをそのまま選べる。最低1、上限なし）。選択肢は最低 `START_LEVEL_SHOWN`（10）個を並べ、解放がそれを超えたぶんだけ増える。表示枠は2段分の高さに固定し、超えたぶんは枠内をスクロールする。未解放はロック表示。選択は設定として保存する。
 
+### 練習モード
+
+タイトルのトグルで切り替える。選んだ開始レベルに**固定**され（撃破してもレベルは上がらない）、**時間無制限**で、HUDは経過秒を数え上げる。記録（自己ベスト・履歴）は残さない。一時停止メニューの「終了して結果を見る」でリザルト（行別正答率・方向別ミス率）を表示する。ランク・記録更新・自己ベストの行は出さない。
+
 ### コンボ
 
 - 正解入力ごとに +1。ミス入力・着地でリセット。
@@ -154,7 +158,7 @@ function analyze(kana) {
 ### 保存（localStorage）
 
 - `juni.best` — `{ level, destroyed, maxCombo }`。到達レベル（同レベルなら撃破数）で更新。開始レベルの解放判定に使う
-- `juni.settings` — `{ guide, hint, sfx, bgm, startLevel }`
+- `juni.settings` — `{ guide, hint, sfx, bgm, startLevel, practice }`
 - `juni.history` — 直近20ゲームの `{ t, level, destroyed, maxCombo, rows }`。リザルトの前回比に使う
 
 ## 音

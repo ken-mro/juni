@@ -20,6 +20,7 @@
   --lv-h: 38px;               /* 開始レベル選択の1マスの高さ */
   --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
   --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
+  --lv-scroll-gap: 12px;      /* スクロールバーが出るときにマスの右側へ空ける余白 */
 
   /* パレット: ビビッドな宇宙。深い紫の空に、黄・シアン・ピンクのネオンが差す */
   --bg-deep:    #1b1252;  /* 最深部の紫(体の背景) */
@@ -400,6 +401,8 @@ i.down { color: var(--danger); }
   scrollbar-width: thin;
   scrollbar-color: var(--key-edge) transparent;
 }
+/* 実際にスクロールするときだけ右に余白を取り、スクロールバーが番号に重ならないようにする */
+.level-picker.scrolls { padding-right: var(--lv-scroll-gap); }
 .lv {
   height: var(--lv-h);
   border: 1px solid var(--line);
@@ -437,6 +440,32 @@ i.down { color: var(--danger); }
   color: var(--dim);
 }
 .best-line b { color: var(--ember); font-variant-numeric: tabular-nums; }
+
+/* 練習モードのトグル(スタート画面)。設定画面の .toggle を流用し、補足を小さく添える */
+#start .toggle { margin-top: 10px; border-top: 1px solid var(--line); }
+.toggle small {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+/* 練習中: レベルは固定なので進行ゲージを出さない */
+#hud.practice .gauge { display: none; }
+#hud .badge-practice {
+  display: none;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--cyan);
+  color: var(--bg-deep);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  vertical-align: 2px;
+}
+#hud.practice .badge-practice { display: inline-block; }
+.hero.practice .rank,
+#overlay.practice .row.record { display: none; }
 
 .ghost {
   margin-top: 10px;
@@ -580,12 +609,12 @@ i.down { color: var(--danger); }
   <header id="hud">
     <span class="wordmark">十二<small>JŪNI</small></span>
     <div class="hud-center">
-      <span class="label">TIME</span>
+      <span class="label" id="hud-time-label">TIME</span>
       <span class="time" id="hud-time">60</span>
     </div>
     <div class="hud-right">
       <div class="stat">
-        <span class="label">LEVEL</span>
+        <span class="label">LEVEL<em class="badge-practice">固定</em></span>
         <span class="value" id="hud-level">1</span>
         <div class="gauge"><i id="hud-progress"></i></div>
       </div>
@@ -603,13 +632,13 @@ i.down { color: var(--danger); }
 
 <div id="overlay" class="hidden">
   <div class="panel">
-    <div class="go-title">TIME UP!</div>
-    <div class="hero">
-      <span class="label">到達レベル <em id="go-newbest" class="badge hidden">記録更新</em></span>
+    <div class="go-title" id="go-title">TIME UP!</div>
+    <div class="hero" id="go-hero">
+      <span class="label"><span id="go-level-label">到達レベル</span> <em id="go-newbest" class="badge hidden">記録更新</em></span>
       <div class="lv-big"><small>LEVEL</small><span id="go-level">1</span></div>
       <div class="rank">RANK<b id="go-rank">C</b></div>
     </div>
-    <div class="row"><span>自己ベスト</span><b id="go-best">—</b></div>
+    <div class="row record"><span>自己ベスト</span><b id="go-best">—</b></div>
     <div class="row"><span>撃破</span><b id="go-destroyed">0</b></div>
     <div class="row"><span>最大コンボ</span><b id="go-combo">0</b></div>
     <div class="sec-title">行別 正答率（↑↓ 前回比）</div>
@@ -634,6 +663,7 @@ i.down { color: var(--danger); }
     <div id="level-picker" class="level-picker"></div>
     <p id="level-desc" class="lv-desc"></p>
     <p class="best-line">自己ベスト <b id="start-best">—</b></p>
+    <label class="toggle"><span>練習モード<small>レベル固定・時間無制限。記録は残さない</small></span><input type="checkbox" id="st-practice"></label>
     <button id="btn-start">スタート</button>
     <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
   </div>
@@ -643,6 +673,7 @@ i.down { color: var(--danger); }
   <div class="panel">
     <div class="go-title">一時停止</div>
     <button id="btn-resume">再開</button>
+    <button id="btn-pause-finish" class="ghost hidden">終了して結果を見る</button>
     <button id="btn-pause-retry" class="ghost">やり直す</button>
   </div>
 </div>
@@ -1586,7 +1617,7 @@ const BGM = (() => {
    設定: 入力ガイド / ヒント / 効果音 / BGM / 開始レベル(localStorageに保存)
    ============================================================ */
 const SETTINGS_KEY = "juni.settings";
-const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1 };
+const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1, practice: false };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
 } catch {}
@@ -1624,7 +1655,9 @@ const game = {
   level: 1,
   levelKills: 0,  // 現在のレベルで積んだ撃破数(次レベルまでの進行)
   startLevel: 1,
+  practice: false, // 練習モード: レベル固定・時間無制限・記録なし
   timeLeft: CONFIG.TIME_LIMIT,
+  elapsed: 0,     // 練習モードの経過秒
   spurt: false,   // ラストスパート演出に入ったか
   started: false, // スタートボタンを押すまでは動かさない
   over: false,
@@ -1632,7 +1665,9 @@ const game = {
 };
 let floaters = []; // フィールド上に浮かぶ文字(撃破した語・LEVEL UP・COMBO)
 
+const hudEl = document.getElementById("hud");
 const hudTimeEl = document.getElementById("hud-time");
+const hudTimeLabelEl = document.getElementById("hud-time-label");
 const hudComboEl = document.getElementById("hud-combo");
 const hudLevelEl = document.getElementById("hud-level");
 const hudProgressEl = document.getElementById("hud-progress");
@@ -1654,7 +1689,8 @@ function updateHud() {
 let shownSec = -1;      // 表示中の残り秒(毎フレームのDOM更新を避ける)
 let shownWarn = false;  // 赤点滅の表示状態
 function updateTimer() {
-  const sec = Math.max(0, Math.ceil(game.timeLeft));
+  /* 練習モードは経過秒を数え上げる。通常は残り秒を数え下げる */
+  const sec = game.practice ? Math.floor(game.elapsed) : Math.max(0, Math.ceil(game.timeLeft));
   const warn = game.spurt && !game.over;
   if (sec !== shownSec) {
     shownSec = sec;
@@ -1725,12 +1761,13 @@ function onMiss(token) {
 
 function onDestroy(meteor) {
   game.destroyed++;
-  game.levelKills++;
   /* 撃破した語の表記(漢字)を浮かせる。読みしかない語は読みを出す */
   floaters.push({
     x: meteor.x, y: meteor.y, text: meteor.word.display ?? meteor.word.reading,
     t: 0, life: 0.9, kind: "word",
   });
+  if (game.practice) return; // 練習モードはレベル固定
+  game.levelKills++;
   while (game.levelKills >= killsToNext(game.level)) {
     game.levelKills -= killsToNext(game.level);
     game.level++;
@@ -1820,12 +1857,29 @@ function renderResultStats(prev) {
   ].join("");
 }
 
-/* 時間切れ: 結果を集計してリザルトを出す */
-function timeUp() {
+/* 終了: 結果を集計してリザルトを出す。
+   通常は時間切れで呼ばれ、記録(自己ベスト・履歴)を更新する。
+   練習モードは一時停止メニューから呼ばれ、記録は残さず統計だけ見せる */
+function finishGame() {
   game.over = true;
   hudTimeEl.classList.remove("warn");
   SFX.timeUp();
   BGM.stop(); // ジングルの邪魔をしないようフェードアウト
+  overlayEl.classList.toggle("practice", game.practice);
+  document.getElementById("go-hero").classList.toggle("practice", game.practice);
+  document.getElementById("go-title").textContent = game.practice ? "おつかれさま" : "TIME UP!";
+  document.getElementById("go-level-label").textContent = game.practice ? "練習したレベル" : "到達レベル";
+  document.getElementById("go-level").textContent = game.level;
+
+  if (game.practice) {
+    document.getElementById("go-newbest").classList.add("hidden");
+    document.getElementById("go-destroyed").textContent = game.destroyed;
+    document.getElementById("go-combo").textContent = game.maxCombo;
+    renderResultStats(loadHistory().at(-1) ?? null); // 前回の本番との比較は出す
+    overlayEl.classList.remove("hidden");
+    return;
+  }
+
   const best = loadBest();
   const isNewBest = game.level > best.level ||
     (game.level === best.level && game.destroyed > best.destroyed);
@@ -1837,7 +1891,6 @@ function timeUp() {
   saveBest(nextBest);
   const history = loadHistory();
   const prev = history.at(-1) ?? null;
-  document.getElementById("go-level").textContent = game.level;
   document.getElementById("go-rank").textContent = rankFor(game.level);
   document.getElementById("go-newbest").classList.toggle("hidden", !isNewBest);
   document.getElementById("go-best").textContent = `LEVEL ${nextBest.level}`;
@@ -1865,9 +1918,13 @@ function restart() {
   Object.assign(game, {
     combo: 0, maxCombo: 0, destroyed: 0,
     level: settings.startLevel, levelKills: 0, startLevel: settings.startLevel,
-    timeLeft: CONFIG.TIME_LIMIT, spurt: false,
+    practice: settings.practice,
+    timeLeft: CONFIG.TIME_LIMIT, elapsed: 0, spurt: false,
     started: true, over: false, paused: false,
   });
+  hudEl.classList.toggle("practice", game.practice);
+  hudTimeLabelEl.textContent = game.practice ? "PRACTICE" : "TIME";
+  pauseFinishEl.classList.toggle("hidden", !game.practice);
   meteors = [];
   particles = [];
   floaters = [];
@@ -1924,6 +1981,8 @@ function renderLevelPicker() {
     pickerEl.appendChild(b);
   }
   activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
+  /* スクロールが生じるときだけ右余白を取る(スクロールバーと番号の重なり防止) */
+  pickerEl.classList.toggle("scrolls", pickerEl.scrollHeight > pickerEl.clientHeight + 1);
   levelDescEl.textContent = `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)}`;
   const best = loadBest();
   startBestEl.textContent = best.level ? `LEVEL ${best.level}` : "—";
@@ -1944,14 +2003,34 @@ renderLevelPicker();
 sky = skyTarget().map((c) => [...c]); // 起動直後は空色をなじませず即座に合わせる
 updateTimer();
 
-document.getElementById("btn-start").addEventListener("click", () => {
+/* 練習モードのトグル: レベル固定・時間無制限・記録なし */
+const stPracticeEl = document.getElementById("st-practice");
+const btnStartEl = document.getElementById("btn-start");
+function syncPractice() {
+  stPracticeEl.checked = settings.practice;
+  btnStartEl.textContent = settings.practice ? "練習スタート" : "スタート";
+}
+stPracticeEl.addEventListener("change", () => {
+  settings.practice = stPracticeEl.checked;
+  saveSettings();
+  syncPractice();
+});
+syncPractice();
+
+btnStartEl.addEventListener("click", () => {
   SFX.ensure();
   restart();
   startEl.classList.add("hidden");
 });
 
-/* ---- 一時停止: 再開 or 最初からやり直す ---- */
+/* ---- 一時停止: 再開 / (練習のみ)終了して結果 / 最初からやり直す ---- */
 const pauseEl = document.getElementById("pause");
+const pauseFinishEl = document.getElementById("btn-pause-finish");
+pauseFinishEl.addEventListener("click", () => {
+  pauseEl.classList.add("hidden");
+  game.paused = false;
+  finishGame();
+});
 document.getElementById("btn-pause").addEventListener("click", () => {
   if (!game.started || game.over) return;
   game.paused = true;
@@ -2014,21 +2093,25 @@ stBgmEl.addEventListener("change", () => {
 /* ---- 更新と描画 ---- */
 function update(dt) {
   if (game.started && !game.over && !game.paused) {
-    /* 残り時間。ラストスパート突入は1回だけ、秒が変わるごとにカウント音 */
-    const prevSec = Math.ceil(game.timeLeft);
-    game.timeLeft -= dt;
-    const sec = Math.ceil(game.timeLeft);
-    if (!game.spurt && game.timeLeft <= CONFIG.LAST_SPURT) {
-      game.spurt = true;
-      floaters.push({
-        x: fieldW / 2, y: fieldH * 0.28, text: `ラスト${CONFIG.LAST_SPURT}秒！`,
-        t: 0, life: 1.4, kind: "spurt",
-      });
-    }
-    if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
-    if (game.timeLeft <= 0) {
-      game.timeLeft = 0;
-      timeUp();
+    if (game.practice) {
+      game.elapsed += dt; // 練習モード: 時間無制限。経過だけ数える
+    } else {
+      /* 残り時間。ラストスパート突入は1回だけ、秒が変わるごとにカウント音 */
+      const prevSec = Math.ceil(game.timeLeft);
+      game.timeLeft -= dt;
+      const sec = Math.ceil(game.timeLeft);
+      if (!game.spurt && game.timeLeft <= CONFIG.LAST_SPURT) {
+        game.spurt = true;
+        floaters.push({
+          x: fieldW / 2, y: fieldH * 0.28, text: `ラスト${CONFIG.LAST_SPURT}秒！`,
+          t: 0, life: 1.4, kind: "spurt",
+        });
+      }
+      if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
+      if (game.timeLeft <= 0) {
+        game.timeLeft = 0;
+        finishGame();
+      }
     }
 
     spawnTimer += dt;

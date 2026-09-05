@@ -463,6 +463,41 @@ i.down { color: var(--danger); }
 }
 .best-line b { color: var(--ember); font-variant-numeric: tabular-nums; }
 
+/* ---- クラウド同期(タイトル下部): ログイン導線とログイン中の表示。バックエンドが無ければ非表示 ---- */
+.cloud {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--dim);
+}
+.cloud.hidden { display: none; }
+.cloud .linklike { margin-top: 0; }
+.cloud-user {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cloud-user.hidden { display: none; }
+.cloud-user b {
+  display: inline-block;
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: var(--text);
+}
+.cloud-status {
+  display: block;
+  margin-top: 4px;
+  min-height: 1.4em;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
 /* ---- 記録一覧 ---- */
 .records-list {
   display: flex;
@@ -551,6 +586,7 @@ i.down { color: var(--danger); }
   cursor: pointer;
 }
 .linklike:disabled { opacity: 0.4; cursor: default; }
+.linklike.hidden { display: none; }
 #btn-start { margin-top: 14px; } /* レベル選択の直下に置く */
 
 /* ---- 設定・一時停止ボタン(フィールド右下) ---- */
@@ -703,6 +739,16 @@ i.down { color: var(--danger); }
     <button id="btn-start" class="primary">スタート</button>
     <button id="btn-records" class="linklike">🏆&#xFE0E; 記録を見る</button>
     <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
+    <!-- クラウド同期(任意): Googleでログインすると記録・設定を保存し、別の端末でも引き継げる。
+         バックエンド(/api)が無い配信先(GitHub Pages など)では非表示のまま -->
+    <div id="cloud" class="cloud hidden">
+      <button id="cloud-login" class="linklike">Googleでログインして記録を引き継ぐ</button>
+      <div id="cloud-user" class="cloud-user hidden">
+        <span>☁&#xFE0E; <b id="cloud-name"></b></span>
+        <button id="cloud-logout" class="linklike">ログアウト</button>
+      </div>
+      <span id="cloud-status" class="cloud-status"></span>
+    </div>
   </div>
 </div>
 
@@ -819,7 +865,16 @@ const CONFIG = {
   SHARE_HEAD_TOP: 316, // 共有画像の見出しの上端(px)
   SHARE_RANK_UNIT: 6,  // 共有画像の RANK の1ドット(px)
   SHARE_RANK_TOP: 636, // 共有画像の RANK の上端(px)
-  SITE_URL: "ken-mro.github.io/juni",
+  SITE_URL: "flick-impact.com",
+};
+
+/* クラウド同期(Googleログイン)の接続先。同一オリジンの Worker(worker/index.js)が受ける。
+   /api/me が JSON を返さない配信先(GitHub Pages など)では機能ごと非表示になる */
+const CLOUD = {
+  API: "/api",
+  LOGIN_URL: "/auth/google/start",
+  LOGOUT_URL: "/auth/logout",
+  PUSH_DELAY: 1.5, // 手元の変更をまとめてサーバーへ送るまでの待ち(秒)
 };
 
 /* canvas 描画色。CSSの :root パレットと合わせて調整する */
@@ -1942,6 +1997,7 @@ delete settings.easy;     // 旧バージョンの設定は捨てる
 delete settings.practice;
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+  markLocalChange();
 }
 SFX.setMuted(!settings.sfx);
 
@@ -2105,11 +2161,189 @@ function loadRecords() {
 }
 function saveRecords(r) {
   try { localStorage.setItem(RECORDS_KEY, JSON.stringify(r)); } catch {}
+  markLocalChange();
 }
 /* クリア済みの最高レベル(未クリアなら0) */
 function maxClearedLevel(records = loadRecords()) {
   return Object.keys(records).reduce((m, k) => Math.max(m, Number(k)), 0);
 }
+
+/* ============================================================
+   クラウド同期(任意): Googleでログインすると記録・設定をサーバー(worker/index.js)に
+   保存し、別の端末でも引き継げる。HTML 側は fetch だけで外部スクリプトは読まない。
+   ログインは /auth/google/start への画面遷移。戻ってきた起動時に pull() がサーバーの
+   データと手元のデータを統合する(記録=レベルごとにタイムが短いほう、設定=更新が新しいほう)。
+   手元の保存(saveRecords / saveSettings)は markLocalChange() を通り、ログイン中なら
+   少し待ってまとめて push() する。バックエンドが無い配信先では UI ごと非表示
+   ============================================================ */
+const SYNC_KEY = "juni.sync"; // { updatedAt }: 手元の記録・設定を最後に変えた時刻(設定の新旧比較に使う)
+let applyingCloud = false;    // サーバーから受け取ったデータを書き戻している間は「手元の変更」にしない
+
+function localUpdatedAt() {
+  try { return Number(JSON.parse(localStorage.getItem(SYNC_KEY))?.updatedAt) || 0; } catch { return 0; }
+}
+function markLocalChange() {
+  if (applyingCloud) return;
+  try { localStorage.setItem(SYNC_KEY, JSON.stringify({ updatedAt: Date.now() })); } catch {}
+  Cloud.schedulePush();
+}
+
+const Cloud = (() => {
+  let available = false; // バックエンドが応答したか
+  let user = null;       // ログイン中なら { name }
+  let status = "";       // 表示用の状態文
+  let lastSent = "";     // 最後にサーバーと一致した内容の指紋(差分がなければ送らない)
+  let inflight = null;   // 送信中の Promise
+  let pending = false;   // 送信中に手元が変わった
+  let timer = 0;
+
+  const rootEl = document.getElementById("cloud");
+  const loginEl = document.getElementById("cloud-login");
+  const userEl = document.getElementById("cloud-user");
+  const nameEl = document.getElementById("cloud-name");
+  const statusEl = document.getElementById("cloud-status");
+
+  function render() {
+    rootEl.classList.toggle("hidden", !available);
+    loginEl.classList.toggle("hidden", !!user);
+    userEl.classList.toggle("hidden", !user);
+    if (user) nameEl.textContent = user.name || "Google アカウント";
+    statusEl.textContent = status;
+  }
+  function setStatus(s) { status = s; render(); }
+
+  function api(method, path, body) {
+    return fetch(CLOUD.API + path, {
+      method,
+      credentials: "same-origin",
+      headers: { Accept: "application/json", ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      keepalive: method === "PUT", // 画面を閉じる直前の送信も届くように
+    });
+  }
+
+  /* 手元の記録・設定を送信用にまとめる */
+  function snapshot() {
+    return { records: loadRecords(), settings: { ...settings }, updatedAt: localUpdatedAt() };
+  }
+  function fingerprint(d) { return JSON.stringify({ r: d.records, s: d.settings }); }
+
+  /* 統合: 記録はレベルごとにタイムが短いほう、設定は更新時刻が新しいほう(サーバー側と同じ規則) */
+  function mergeData(local, cloud) {
+    const records = { ...local.records };
+    for (const [lv, rec] of Object.entries(cloud.records ?? {})) {
+      if (!records[lv] || rec.time < records[lv].time) records[lv] = rec;
+    }
+    const cloudNewer = (cloud.updatedAt ?? 0) > local.updatedAt;
+    return {
+      records,
+      settings: cloudNewer ? { ...local.settings, ...cloud.settings } : local.settings,
+      updatedAt: Math.max(local.updatedAt, cloud.updatedAt ?? 0),
+    };
+  }
+
+  /* 統合結果を手元へ書き戻す。プレイ中は設定を触らない(音やヒントが途中で変わらないように) */
+  function apply(data) {
+    applyingCloud = true;
+    try {
+      saveRecords(data.records);
+      if (!game.started) {
+        Object.assign(settings, data.settings);
+        saveSettings();
+      }
+    } finally {
+      applyingCloud = false;
+    }
+    if (!game.started) {
+      SFX.setMuted(!settings.sfx);
+      renderLevelPicker();
+    }
+  }
+
+  /* 起動時に1回: ログイン確認 → ログイン中ならサーバーと統合 */
+  async function init() {
+    const params = new URLSearchParams(location.search);
+    const auth = params.get("auth");
+    if (auth) history.replaceState(null, "", location.pathname); // ログインから戻った ?auth=... を消す
+    try {
+      const r = await api("GET", "/me");
+      if (!r.ok || !(r.headers.get("Content-Type") ?? "").includes("json")) throw new Error("no backend");
+      user = (await r.json()).user;
+      available = true;
+    } catch {
+      available = false;
+      render();
+      return;
+    }
+    if (auth === "error") status = "ログインできませんでした";
+    render();
+    if (user) await pull();
+  }
+
+  async function pull() {
+    setStatus("同期中…");
+    try {
+      const r = await api("GET", "/data");
+      if (r.status === 401) { user = null; setStatus(""); return; } // セッション切れ
+      if (!r.ok) throw new Error(r.status);
+      const cloud = (await r.json()).data;
+      const local = snapshot();
+      apply(cloud ? mergeData(local, cloud) : local);
+      lastSent = cloud ? fingerprint(cloud) : "";
+      await push(); // 手元にだけあった記録・設定を送る(差分がなければ何もしない)
+      setStatus("同期済み");
+    } catch {
+      setStatus("同期できませんでした");
+    }
+  }
+
+  function schedulePush() {
+    if (!user) return;
+    clearTimeout(timer);
+    timer = setTimeout(push, CLOUD.PUSH_DELAY * 1000);
+  }
+
+  /* 手元の内容をサーバーへ。サーバー側で別端末の記録と統合された結果が返る */
+  function push() {
+    clearTimeout(timer);
+    if (!user) return Promise.resolve();
+    if (inflight) { pending = true; return inflight; }
+    const data = snapshot();
+    const fp = fingerprint(data);
+    if (fp === lastSent) return Promise.resolve();
+    setStatus("同期中…");
+    inflight = (async () => {
+      try {
+        const r = await api("PUT", "/data", data);
+        if (r.status === 401) { user = null; setStatus(""); return; }
+        if (!r.ok) throw new Error(r.status);
+        const saved = (await r.json()).data;
+        lastSent = fingerprint(saved);
+        if (lastSent !== fp) apply(saved); // 別端末の記録が統合されて返ってきた
+        setStatus("同期済み");
+      } catch {
+        setStatus("同期できませんでした"); // 次の変更時か画面復帰時に再送する
+      } finally {
+        inflight = null;
+        if (pending) { pending = false; schedulePush(); }
+      }
+    })();
+    return inflight;
+  }
+
+  function login() { location.href = CLOUD.LOGIN_URL; }
+  async function logout() {
+    try { await fetch(CLOUD.LOGOUT_URL, { method: "POST", credentials: "same-origin" }); } catch {}
+    user = null;
+    lastSent = "";
+    setStatus(""); // 手元の記録はそのまま残る
+  }
+
+  loginEl.addEventListener("click", login);
+  document.getElementById("cloud-logout").addEventListener("click", logout);
+
+  return { init, schedulePush, push, isLoggedIn: () => !!user };
+})();
 
 /* 正答率(%)。試行がなければ null */
 function accuracy(s) {
@@ -2340,6 +2574,11 @@ document.getElementById("btn-start").addEventListener("click", () => {
   startLevel(settings.startLevel);
   startEl.classList.add("hidden");
 });
+
+/* クラウド同期の開始。画面を隠す/閉じる直前は待たずに送り、戻ってきたら失敗分を再送する */
+Cloud.init();
+document.addEventListener("visibilitychange", () => { Cloud.push(); });
+window.addEventListener("pagehide", () => { Cloud.push(); });
 
 /* ---- 記録一覧: クリア済みレベルのベストタイム。タップで当時の結果を表示 ---- */
 const recordsEl = document.getElementById("records");

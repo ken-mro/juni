@@ -1,0 +1,31 @@
+# main に push されたら Cloudflare Workers(flick-impact.com)へデプロイする。
+# 必要な Secrets: CLOUDFLARE_API_TOKEN(「Cloudflare Workers を編集する」テンプレート)/ CLOUDFLARE_ACCOUNT_ID
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - worker/**
+      - wrangler.toml
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

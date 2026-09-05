@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-「十二 JŪNI」— フリック入力で落下する「ことばの隕石」を破壊する、1分間タイムアタックのスマホ向けタイピングゲーム。成績はスコアではなく**到達レベル**。仕様の原典は [spec.md](spec.md)。実装は **index.html 一枚**で完結する。
+「十二 JŪNI」— フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。**1プレイ = 1レベル**で、60秒以内に規定数を撃破すればクリア。成績は**クリアタイム**（短いほど良い）。仕様の原典は [spec.md](spec.md)。実装は **index.html 一枚**で完結する。
 
 ## 絶対に守る制約
 
-- **単一HTMLファイル**。CSS/JSすべてインライン。外部依存ゼロ（CDN・npm・ビルドツール・音源ファイル不可。音はWeb Audio APIで合成）
+- **単一HTMLファイル**。CSS/JSすべてインライン。外部依存ゼロ（CDN・npm・ビルドツール・音源ファイル不可。音はWeb Audio APIで合成、共有画像も canvas で描く）
 - 入力は **Pointer Events で統一**（`touchstart` 禁止）。マウスでも同じコードパスが通る
 - 調整用の数値はファイル先頭に集約: レイアウト系・DOMの色は CSS `:root` のカスタムプロパティ、ゲームプレイ系は `<script>` 先頭の `CONFIG`、canvas の描画色は `PALETTE`。関数内にマジックナンバー・色コードを埋めない
 - 配信先は GitHub Pages（静的）。`localStorage` は使用可
@@ -23,20 +23,20 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 
 - ブラウザ確認は **http://127.0.0.1:8321** を使う。**localhost（::1）は使わない** — この開発機ではIPv6ループバックが途中で接続リセットされ、ページが読み込み途中で固まる
 - 実機（スマホ）は同一Wi-FiからPCのLAN IP（例 http://192.168.3.4:8321）で開く
-- 自動確認は Playwright MCP を使用。`page.mouse` の down/move/up でフリックを再現できる。ブラウザウィンドウが背面にあると rAF が約1fpsに間引かれ「隕石が動かない」ように見える点に注意（`update(dt)` を直接呼ぶ決定的テストが確実）
+- 自動確認は Playwright MCP を使用。`page.mouse` の down/move/up でフリックを再現できる。ブラウザウィンドウが背面にあると rAF が約1fpsに間引かれ「隕石が動かない」ように見える点に注意（`update(dt)` を直接呼ぶ決定的テストが確実。撃破は `handleGameInput(expectedToken(meteors[0]))` を繰り返す）
 - 各変更後はコンソールエラーがないことまで確認してから完了報告する。確認用スクリーンショットをリポジトリに残さない
 
 ## アーキテクチャ（index.html 内の構成順）
 
-1. **CSS**: `:root` トークン（縦配分 `--pad-h`、パレット。基調は「ビビッドな宇宙」= 深い紫 `--bg-deep` × 星の黄 `--ember: #ffd93d`、副アクセントに `--cyan` / `--pink`。明朝体はタイトル・LEVELバナーのみ）
-2. **CONFIG / PALETTE / COST**: 全調整値。`FLICK_THRESHOLD`、`TIME_LIMIT`（60秒）、落下・出現・レベルカーブ、開始レベル解放、ランクしきい値、音量など。`PALETTE.SKY` はレベル別の空の色
+1. **CSS**: `:root` トークン（縦配分 `--pad-h`、開始レベル選択の寸法 `--lv-*`、パレット。基調は「ビビッドな宇宙」= 深い紫 `--bg-deep` × 星の黄 `--ember: #ffd93d`、副アクセントに `--cyan` / `--pink`。明朝体はタイトル・ランクのみ）。オーバーレイは `.modal` / `.panel` を共用
+2. **CONFIG / PALETTE / COST**: 全調整値。`FLICK_THRESHOLD`、`TIME_LIMIT`（60秒）、`CLEAR_RATIO`（規定数係数）、落下・出現カーブ、`RANKS`（クリアタイムのしきい値）、共有画像サイズ、音量など。`PALETTE.SKY` はレベル別の空の色、`PALETTE.SHARE_*` は共有画像の色
 3. **入力データ**: `KEY_LAYOUT`（3×4キー）、`FLICK_MAP`（キー行→[中央,左,上,右,下]、nullは無反応）、`CYCLES`（小゛゜の変換循環 か→が、は→ば→ぱ、つ→っ→づ）
 4. **単語データ `WORDS`**: `"よみ|表記"` 形式のベタ書き（約210語、宇宙系2割）。起動時に `validateReading` で検査し不正語は `console.warn` してスキップ
 5. **語彙モジュール**: `toBase` / `rowOf` / `extraCost` / `analyze`（`actions`=実フリック回数が難易度基準）
-6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `LEVEL_POOLS`（起動時確定）。レベルはそのレベル内の撃破数 `game.levelKills` が `killsToNext(level)`（`LEVEL_KILLS` → `ENDLESS_KILLS_PER_LEVEL`）に達すると上がり続ける（速度は上限なし、出現間隔は下限あり）
-7. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / LEVEL UP / COMBO / ラスト10秒）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの目標色へ毎フレームなじむ。着地時は `shake` で全体を揺らす
+6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `LEVEL_POOLS`（起動時確定）。`speedScale(level)` / `spawnScale(level)` / `spawnIntervalFor(level)` / `requiredKills(level)` はレベルを引数に取る純関数。L6以降は速度と出現頻度が上がり続け、規定数も増える
+7. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす
 8. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
-9. **ゲーム状態・入力・UI配線**: `game` オブジェクト（`timeLeft`/`level`/`levelKills`/`combo`）、統計、記録 `juni.best`、オーバーレイ（スタート+開始レベル選択/一時停止/設定/TIME UP リザルト）
+9. **ゲーム状態・入力・UI配線**: `game`（`timeLeft`/`level`/`destroyed`/`required`/`combo`）、統計 `stats`、記録 `juni.records`、`showResult(rec, mode)`（clear / fail / view の3モード）、`finishGame(cleared)`、`startLevel(level)`、開始レベル選択、記録一覧、共有画像 `buildShareImage` / `shareResult`
 
 ## 重要な設計判断（変更時に壊しやすい不変条件）
 
@@ -44,13 +44,15 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 - **入力の展開モデル**: 各文字は実際の打鍵列に展開される（が=[か,゛]、ぱ=[は,゛,゛]、っ=[つ,゛]）。展開は `CYCLES` の位置から決まる。一方スコア用の `COST`（濁1/半濁2/小1）は仕様の規定値で、実打鍵数と一致しない文字（づ）があるが**仕様が優先**
 - **ターゲティング**: 最初に一致した入力で隕石にロックされ、破壊・着地まで対象は変わらない。出題時は場の隕石と先頭入力トークンが重複しない語を選ぶ（表示文字でなくトークン基準）。直近10語は再出題しない
 - **canvas/DOM の境界**: フィールドのみ canvas（座標はCSSピクセル、dprは `setTransform` で吸収）。キーパッド・HUD・オーバーレイ・フリックガイドは DOM。着地の判定線は canvas 下端そのもの（座標変換なし）
-- **ライフもスコアもない**。ミス入力も隕石の着地もコンボリセットのみ（着地は画面揺れ付き）。終了条件は `TIME_LIMIT` の時間切れだけ
-- **場の補充**: 隕石が `METEOR_MIN` 未満なら出現間隔を待たずに補充する（`SPAWN_MIN_GAP` は空ける）。1分間の手持ち無沙汰を作らないための仕様
-- **開始レベル**: タイトルで選択。解放上限は `juni.best.level − START_LEVEL_UNLOCK_OFFSET`（既定 OFFSET=0 で到達レベルをそのまま選べる。最低1、上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロールする。`restart()` は `settings.startLevel` から始める
-- **練習モード**（`settings.practice` → `game.practice`）: レベル固定（`onDestroy` でレベルアップしない）・時間無制限（`game.elapsed` を数え上げ）・記録なし。終了は一時停止メニューの「終了して結果を見る」→ `finishGame()`。`finishGame()` は通常の時間切れと共通で、練習時は自己ベスト・履歴を更新せず、ランク/記録更新/自己ベスト行を隠す
-- **リセットの範囲**: `restart()`/`goToTitle()` はそのプレイ1回分の状態を全消去するが、自己ベスト・成長記録・設定は残す
-- **localStorage キー**: `juni.best`（level, destroyed, maxCombo）/ `juni.settings`（guide, hint, sfx, bgm, startLevel, practice）/ `juni.history`（直近20ゲームの level, destroyed, maxCombo と行別正答率。リザルトの前回比↑↓に使用）。旧 `juni.highscore` と `settings.easy` は読まない
-- 画面遷移はタイトル経由に統一: TIME UP「もう一度」も一時停止「やり直す」もタイトル画面へ戻る
+- **1プレイ = 1レベル（固定）**。終了条件は「`destroyed >= required` でクリア」か「`TIME_LIMIT` の時間切れ」の2つだけ。ライフもスコアもない
+- **規定数** `requiredKills(level) = max(1, round(TIME_LIMIT / spawnIntervalFor(level) * CLEAR_RATIO))`。出現間隔を変えると規定数も変わる
+- **着地は撃破数 −1**（0未満にならない）＋コンボリセット＋揺れ。ミス入力はコンボリセットのみ
+- **場の補充**: 隕石が `METEOR_MIN` 未満なら出現間隔を待たずに補充する（`SPAWN_MIN_GAP` は空ける）。速く撃破するほど早くクリアできる根拠
+- **開始レベル**: 解放上限 = `maxClearedLevel() + 1`（上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロール。`startLevel(level)` は `settings.startLevel` も更新する
+- **記録**: クリア時のみ更新。`juni.records[level]` はベストタイム更新（初クリア含む）のときだけ丸ごと置き換える。時間切れは記録に触れない。行別正答率の ↑↓ は同レベルの前ベストとの比較
+- **リザルトの遷移**: クリア「次のレベルへ」と時間切れ「もう一度」は `startLevel()` で即開始（タイトルを経由しない）。「タイトルへ」と一時停止「やり直す」は `goToTitle()`。記録閲覧（view）の「閉じる」はオーバーレイを閉じるだけ（下にタイトルが残っている）
+- **共有画像**: `buildShareImage(rec)` は 1080×1080 の canvas を返す純関数。`shareResult()` は Web Share API（`navigator.canShare({files})`）→ 失敗/非対応なら `#share` に `<img>` とダウンロードリンクを出す
+- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
 
 ## 進め方（このリポジトリでの合意事項）
 

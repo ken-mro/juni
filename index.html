@@ -17,7 +17,7 @@
   --pad-gap: 6px;             /* キー間の隙間 */
   --pad-pad: 8px;             /* キーパッド外周の余白 */
   --pad-side: clamp(24px, 9vw, 56px); /* キーパッド左右の空き(端のキーのフリック用) */
-  --lv-h: 38px;               /* 開始レベル選択の1マスの高さ */
+  --lv-h: 44px;               /* 開始レベル選択の1マスの高さ(番号+ベストタイムの2行) */
   --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
   --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
   --lv-scroll-gap: 12px;      /* スクロールバーが出るときにマスの右側へ空ける余白 */
@@ -34,9 +34,9 @@
   --text:       #ffffff;
   --dim:        #bdb8f2;  /* 非活性・補助テキスト(ラベンダー) */
   --ember:      #ffd93d;  /* 主アクセント: 星の黄。次に打つ文字・強調 */
-  --cyan:       #4ff0e6;  /* 副アクセント: コンボ・ロック */
+  --cyan:       #4ff0e6;  /* 副アクセント: コンボ・ロック・ランク */
   --pink:       #ff6fb5;  /* 副アクセント: グラデーションの相方 */
-  --danger:     #ff5c7a;  /* 警告(ラスト10秒・ミス) */
+  --danger:     #ff5c7a;  /* 警告(ラスト10秒・ミス・撃破数の減少) */
   --ok:         #7dffb0;  /* 改善(↑) */
 
   --font-display: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
@@ -64,7 +64,7 @@ html, body {
   flex-direction: column;
 }
 
-/* ---- HUD: 左=ロゴ / 中央=タイマー / 右=レベル(進行ゲージ)・コンボ ---- */
+/* ---- HUD: 左=ロゴ+レベル / 中央=タイマー / 右=撃破(進行ゲージ)・コンボ ---- */
 #hud {
   flex: none;
   height: calc(var(--hud-h) + env(safe-area-inset-top));
@@ -73,6 +73,11 @@ html, body {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   border-bottom: 1px solid var(--line);
+}
+.hud-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 #hud .wordmark {
   font-family: var(--font-display);
@@ -91,6 +96,19 @@ html, body {
 }
 @media (max-width: 380px) {
   #hud .wordmark small { display: none; } /* 狭い端末ではJŪNIを省く */
+}
+/* プレイ中のレベル(固定)を小さなピルで示す */
+.lv-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ember);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 #hud .label {
   display: block;
@@ -238,11 +256,8 @@ html, body {
 }
 #chip.miss { color: var(--danger); transition: none; }
 
-/* ---- オーバーレイ(スタート・リザルト・一時停止・設定) ---- */
-#overlay,
-#settings,
-#start,
-#pause {
+/* ---- オーバーレイ共通(スタート・リザルト・一時停止・設定・記録・共有) ---- */
+.modal {
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -251,41 +266,38 @@ html, body {
   justify-content: center;
   background: rgba(27, 18, 82, 0.72);
 }
-#overlay.hidden,
-#settings.hidden,
-#start.hidden,
-#pause.hidden { display: none; }
-#overlay .panel,
-#settings .panel,
-#start .panel,
-#pause .panel {
+.modal.hidden { display: none; }
+/* 重なり順: タイトルの上にリザルト(記録の閲覧)、その上に記録一覧・共有画像が乗る */
+#overlay { z-index: 21; }
+#records { z-index: 22; }
+#share   { z-index: 23; }
+.modal .panel {
   width: min(84vw, 350px);
   max-height: 90dvh;
   overflow-y: auto;
   padding: 22px 22px 20px;
-  touch-action: pan-y; /* パネル自体も縦スクロール可(body は touch-action: none) */
+  touch-action: pan-y; /* body の touch-action: none を上書きして縦スクロールを許す */
   background: var(--panel);
   border: 1px solid var(--key-edge);
   border-radius: 16px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   text-align: center;
 }
-#overlay .go-title,
-#settings .go-title,
-#pause .go-title {
+.go-title {
   font-family: var(--font-display);
   font-size: 26px;
   letter-spacing: 0.3em;
   margin-bottom: 12px;
 }
-#overlay .go-title {
+.go-title.grad {
   background: linear-gradient(90deg, var(--ember), var(--pink));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
+.go-title.fail { color: var(--dim); }
 
-/* リザルトの主役: 到達レベルを大きく */
+/* リザルトの主役: クリアタイム(または 撃破/規定)を大きく */
 .hero {
   display: flex;
   flex-direction: column;
@@ -302,12 +314,12 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .hero .lv-big small {
-  font-size: 14px;
-  letter-spacing: 0.2em;
+  font-size: 16px;
+  letter-spacing: 0.1em;
   color: var(--dim);
-  margin-right: 8px;
-  vertical-align: 16px;
+  margin-left: 6px;
 }
+.hero.fail .lv-big { color: var(--text); }
 .hero .rank {
   font-family: var(--font-display);
   font-size: 15px;
@@ -315,8 +327,9 @@ html, body {
   color: var(--cyan);
 }
 .hero .rank b { font-size: 24px; margin-left: 4px; }
+.hero .rank.hidden { display: none; }
 
-#overlay .row {
+.row {
   display: flex;
   justify-content: space-between;
   padding: 6px 2px;
@@ -324,10 +337,11 @@ html, body {
   color: var(--dim);
   border-bottom: 1px solid var(--line);
 }
-#overlay .row b {
+.row b {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+.row.hidden { display: none; }
 .badge {
   display: inline-block;
   margin-left: 6px;
@@ -341,8 +355,7 @@ html, body {
   vertical-align: 2px;
 }
 .badge.hidden { display: none; }
-#overlay .sec-title,
-#start .sec-title {
+.sec-title {
   margin-top: 16px;
   text-align: left;
   font-size: 10px;
@@ -405,6 +418,11 @@ i.down { color: var(--danger); }
 .level-picker.scrolls { padding-right: var(--lv-scroll-gap); }
 .lv {
   height: var(--lv-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.05);
@@ -415,11 +433,18 @@ i.down { color: var(--danger); }
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
+.lv small {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ember);
+  min-height: 11px; /* ベストタイムが無くても高さを揃える */
+}
 .lv.active {
   background: linear-gradient(135deg, var(--ember), var(--pink));
   border-color: transparent;
   color: var(--bg-deep);
 }
+.lv.active small { color: var(--bg-deep); opacity: 0.8; }
 .lv.locked {
   color: rgba(255, 255, 255, 0.28);
   border-style: dashed;
@@ -441,33 +466,67 @@ i.down { color: var(--danger); }
 }
 .best-line b { color: var(--ember); font-variant-numeric: tabular-nums; }
 
-/* 練習モードのトグル(スタート画面)。設定画面の .toggle を流用し、補足を小さく添える */
-#start .toggle { margin-top: 10px; border-top: 1px solid var(--line); }
-.toggle small {
-  display: block;
-  font-size: 11px;
-  color: var(--dim);
-  margin-top: 2px;
+/* ---- 記録一覧 ---- */
+.records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 50dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
-/* 練習中: レベルは固定なので進行ゲージを出さない */
-#hud.practice .gauge { display: none; }
-#hud .badge-practice {
-  display: none;
-  margin-left: 4px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: var(--cyan);
-  color: var(--bg-deep);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  vertical-align: 2px;
+.rec {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
 }
-#hud.practice .badge-practice { display: inline-block; }
-.hero.practice .rank,
-#overlay.practice .row.record { display: none; }
+.rec .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ember); }
+.rec .rec-rank { font-family: var(--font-display); font-size: 18px; color: var(--cyan); }
+.records-empty { margin: 14px 0 4px; font-size: 13px; color: var(--dim); }
+.records-empty.hidden { display: none; }
 
+/* ---- 共有画像のフォールバック表示 ---- */
+#share-img {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.share-hint { margin-top: 8px; font-size: 11px; color: var(--dim); }
+
+/* ---- ボタン ---- */
+.primary {
+  display: block;
+  margin-top: 20px;
+  width: 100%;
+  padding: 13px 0;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--ember), var(--pink));
+  color: var(--bg-deep);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(255, 111, 181, 0.35);
+  cursor: pointer;
+}
+.primary.hidden { display: none; }
 .ghost {
+  display: block;
   margin-top: 10px;
   width: 100%;
   padding: 10px 0;
@@ -480,8 +539,8 @@ i.down { color: var(--danger); }
   letter-spacing: 0.2em;
   cursor: pointer;
 }
-
-/* 三次的な操作(設定など)は控えめなリンク風にする */
+.ghost.hidden { display: none; }
+/* 三次的な操作(設定・記録)は控えめなリンク風にする */
 .linklike {
   margin-top: 12px;
   background: none;
@@ -493,25 +552,7 @@ i.down { color: var(--danger); }
   padding: 6px 10px;
   cursor: pointer;
 }
-
-#go-retry,
-#st-close,
-#btn-start,
-#btn-resume {
-  margin-top: 20px;
-  width: 100%;
-  padding: 13px 0;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--ember), var(--pink));
-  color: var(--bg-deep);
-  font-family: var(--font-ui);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  box-shadow: 0 6px 18px rgba(255, 111, 181, 0.35);
-  cursor: pointer;
-}
+.linklike:disabled { opacity: 0.4; cursor: default; }
 #btn-start { margin-top: 14px; } /* レベル選択の直下に置く */
 
 /* ---- 設定・一時停止ボタン(フィールド右下) ---- */
@@ -607,15 +648,18 @@ i.down { color: var(--danger); }
 <body>
 <div id="app">
   <header id="hud">
-    <span class="wordmark">十二<small>JŪNI</small></span>
+    <div class="hud-left">
+      <span class="wordmark">十二<small>JŪNI</small></span>
+      <span class="lv-pill" id="hud-level">LV 1</span>
+    </div>
     <div class="hud-center">
-      <span class="label" id="hud-time-label">TIME</span>
+      <span class="label">TIME</span>
       <span class="time" id="hud-time">60</span>
     </div>
     <div class="hud-right">
       <div class="stat">
-        <span class="label">LEVEL<em class="badge-practice">固定</em></span>
-        <span class="value" id="hud-level">1</span>
+        <span class="label">撃破</span>
+        <span class="value" id="hud-kills">0 / 0</span>
         <div class="gauge"><i id="hud-progress"></i></div>
       </div>
       <div class="stat"><span class="label">COMBO</span><span class="value combo" id="hud-combo">0</span></div>
@@ -630,62 +674,86 @@ i.down { color: var(--danger); }
   <div id="pad"></div>
 </div>
 
-<div id="overlay" class="hidden">
+<!-- リザルト: クリア / 時間切れ / 記録の閲覧 の3モードで共用 -->
+<div id="overlay" class="modal hidden">
   <div class="panel">
-    <div class="go-title" id="go-title">TIME UP!</div>
+    <div class="go-title grad" id="go-title">CLEAR!</div>
     <div class="hero" id="go-hero">
-      <span class="label"><span id="go-level-label">到達レベル</span> <em id="go-newbest" class="badge hidden">記録更新</em></span>
-      <div class="lv-big"><small>LEVEL</small><span id="go-level">1</span></div>
-      <div class="rank">RANK<b id="go-rank">C</b></div>
+      <span class="label"><span id="go-hero-label">クリアタイム</span> <em id="go-newbest" class="badge hidden">記録更新</em></span>
+      <div class="lv-big" id="go-main">0.00<small>秒</small></div>
+      <div class="rank" id="go-rank-wrap">RANK<b id="go-rank">C</b></div>
     </div>
-    <div class="row record"><span>自己ベスト</span><b id="go-best">—</b></div>
-    <div class="row"><span>撃破</span><b id="go-destroyed">0</b></div>
+    <div class="row"><span>レベル</span><b id="go-level">1</b></div>
+    <div class="row" id="go-best-row"><span>ベストタイム</span><b id="go-best">—</b></div>
     <div class="row"><span>最大コンボ</span><b id="go-combo">0</b></div>
-    <div class="sec-title">行別 正答率（↑↓ 前回比）</div>
+    <div class="sec-title">行別 正答率（↑↓ ベスト比）</div>
     <div id="go-rows" class="rowgrid"></div>
     <div class="sec-title">方向別 ミス率</div>
     <div id="go-dirs" class="dircross"></div>
-    <button id="go-retry">もう一度</button>
+    <button id="go-next" class="primary">次のレベルへ</button>
+    <button id="go-retry" class="primary">もう一度</button>
+    <button id="go-share" class="ghost">画像を共有・保存</button>
+    <button id="go-close" class="ghost">タイトルへ</button>
   </div>
 </div>
 
-<div id="start">
+<div id="start" class="modal">
   <div class="panel">
     <div class="start-title">十二<small>JŪNI</small></div>
-    <p class="start-copy">1分間で、どこまでレベルを上げられる？</p>
+    <p class="start-copy">フリック入力で地球を守れ</p>
     <div class="sec-title">あそびかた</div>
     <ul class="start-rules">
-      <li>隕石のことばをフリック入力で破壊</li>
-      <li>撃破を重ねるとレベルアップ。字種が増え、速くなる</li>
-      <li>落としてもOK。コンボが切れるだけ</li>
+      <li>隕石のことばをフリックで撃つ</li>
+      <li>60秒以内に規定数を撃破でクリア</li>
+      <li>落とすと撃破数が1もどる</li>
     </ul>
     <div class="sec-title">開始レベル</div>
     <div id="level-picker" class="level-picker"></div>
     <p id="level-desc" class="lv-desc"></p>
-    <p class="best-line">自己ベスト <b id="start-best">—</b></p>
-    <label class="toggle"><span>練習モード<small>レベル固定・時間無制限。記録は残さない</small></span><input type="checkbox" id="st-practice"></label>
-    <button id="btn-start">スタート</button>
+    <p class="best-line">最高クリア <b id="start-best">—</b></p>
+    <button id="btn-start" class="primary">スタート</button>
+    <button id="btn-records" class="linklike">🏆&#xFE0E; 記録を見る</button>
     <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
   </div>
 </div>
 
-<div id="pause" class="hidden">
+<div id="pause" class="modal hidden">
   <div class="panel">
     <div class="go-title">一時停止</div>
-    <button id="btn-resume">再開</button>
-    <button id="btn-pause-finish" class="ghost hidden">終了して結果を見る</button>
+    <button id="btn-resume" class="primary">再開</button>
     <button id="btn-pause-retry" class="ghost">やり直す</button>
   </div>
 </div>
 
-<div id="settings" class="hidden">
+<div id="settings" class="modal hidden">
   <div class="panel">
     <div class="go-title">設定</div>
     <label class="toggle"><span>入力ガイド</span><input type="checkbox" id="st-guide" checked></label>
     <label class="toggle"><span>次のキーのヒント</span><input type="checkbox" id="st-hint" checked></label>
     <label class="toggle"><span>効果音</span><input type="checkbox" id="st-sfx" checked></label>
     <label class="toggle"><span>BGM</span><input type="checkbox" id="st-bgm" checked></label>
-    <button id="st-close">閉じる</button>
+    <button id="st-close" class="primary">閉じる</button>
+  </div>
+</div>
+
+<!-- 記録: クリア済みレベルごとのベストタイム。タップで当時のプレー結果を表示 -->
+<div id="records" class="modal hidden">
+  <div class="panel">
+    <div class="go-title">記録</div>
+    <p id="records-empty" class="records-empty hidden">まだクリアした記録がありません</p>
+    <div id="records-list" class="records-list"></div>
+    <button id="rc-close" class="primary">閉じる</button>
+  </div>
+</div>
+
+<!-- 共有画像のフォールバック(共有シートが使えない端末): 長押し保存 or ダウンロード -->
+<div id="share" class="modal hidden">
+  <div class="panel">
+    <div class="go-title">画像を保存</div>
+    <img id="share-img" alt="プレー結果の画像">
+    <p class="share-hint">画像を長押しすると保存できます</p>
+    <a id="share-dl" class="primary" download="juni.png" href="#">ダウンロード</a>
+    <button id="share-close" class="ghost">閉じる</button>
   </div>
 </div>
 
@@ -705,13 +773,14 @@ const CONFIG = {
   GUIDE_GAP: 3,         // ガイドのマス間の隙間(px)
   GUIDE_LIFT: 10,       // ガイドをキー上端からどれだけ浮かせるか(px)
 
-  /* 1プレイの時間制限。ライフはなく、時間切れで必ず終わる */
+  /* 1プレイ = 1レベル。60秒以内に規定数を撃破すればクリア */
   TIME_LIMIT: 60,       // 制限時間(秒)
   LAST_SPURT: 10,       // 残りこの秒数からラストスパート演出(タイマー赤・秒カウント音・BGM加速)
+  CLEAR_RATIO: 0.8,     // 規定撃破数 = 1分間の出現予定数(60秒÷出現間隔) × この係数
 
   FALL_SPEED: 30,       // 隕石の基本落下速度(px/秒)
   FALL_SPEED_VAR: 0.25, // 落下速度の個体差(±この割合)
-  SPAWN_INTERVAL: 2.4,  // 隕石の出現間隔(秒)
+  SPAWN_INTERVAL: 2.4,  // 隕石の出現間隔(秒)。規定撃破数の算出元でもある
   SPAWN_MIN_GAP: 0.45,  // 場が少ないときの補充でも最低これだけは間を置く(秒)
   METEOR_MIN: 2,        // 場に常に維持する隕石数(これ未満なら間隔を待たず補充)
   METEOR_MAX: 5,        // 同時に存在できる隕石の上限
@@ -719,11 +788,10 @@ const CONFIG = {
   METEOR_RY: 26,        // 隕石の縦半径(px)。横半径は文字数から決まる
   HIT_PARTICLES: 8,     // 1文字消したときの破片の数
   BOOM_PARTICLES: 26,   // 破壊時の破片の数
-  RING_PARTICLES: 48,   // レベルアップ時に画面中央から放つ破片の数
   CONFETTI: 110,        // 記録更新時に降らせる紙吹雪の数
   SHAKE_AMP: 6,         // 隕石着地時の画面揺れの振幅(px)
   SHAKE_DECAY: 18,      // 揺れの減衰速度(px/秒)
-  SKY_LERP: 2.0,        // レベルアップ時の空色の追従速度(1/秒)
+  SKY_LERP: 2.0,        // 空色の追従速度(1/秒)
 
   SOUND_VOLUME: 0.5,    // 効果音の全体音量(0で無音)
   BGM_VOLUME: 0.25,     // BGMの全体音量(0で無音)。効果音とは独立に調整する
@@ -737,25 +805,24 @@ const CONFIG = {
   SPAWN_RETRY: 30,      // 先頭文字が重複しない単語を探す試行回数
   RECENT_WORDS: 10,     // 直近この数の単語は再出題しない
 
-  /* レベル進行。難易度の主軸は行の解放で、速度・出現間隔は補助。
-     LEVEL_KILLS[i] = レベル(i+1)で次に上がるのに必要な撃破数。
-     それ以降(エンドレス)は ENDLESS_KILLS_PER_LEVEL ごとに上がり続ける */
-  LEVEL_KILLS: [4, 5, 6, 7],
-  ENDLESS_KILLS_PER_LEVEL: 6,
+  /* レベル別の難易度。行の解放が主軸で、速度・出現間隔は補助 */
   LEVEL_SPEED: [1.0, 1.15, 1.3, 1.5, 1.7],       // L1..L5 の落下速度係数
   LEVEL_SPAWN: [1.0, 0.93, 0.86, 0.79, 0.73],    // L1..L5 の出現間隔係数
   ENDLESS_SPEED_PER_LEVEL: 0.08, // L6以降、1レベルごとの速度上昇(L5比+8%ずつ)
   ENDLESS_SPAWN_PER_LEVEL: 0.04, // L6以降、1レベルごとの出現間隔短縮(-4%ずつ)
   SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
 
-  /* 開始レベル選択(テトリス方式)。解放上限 = 自己ベスト到達レベル − OFFSET(上限なし)。
-     OFFSET 0 = 到達したレベルからすぐ再挑戦できる。
+  /* 開始レベル選択。解放上限 = クリア済み最高レベル + 1(上限なし)。
      選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
   START_LEVEL_SHOWN: 10,
-  START_LEVEL_UNLOCK_OFFSET: 0,
 
-  /* ランク: 到達レベルがしきい値以上なら、その文字。上から順に判定 */
-  RANKS: [[9, "S"], [7, "A"], [5, "B"], [3, "C"], [1, "D"]],
+  /* ランク: クリアタイム(秒)がしきい値以下なら、その文字。上から順に判定 */
+  RANKS: [[30, "S"], [40, "A"], [50, "B"], [60, "C"]],
+
+  /* SNS共有画像 */
+  SHARE_W: 1080,
+  SHARE_H: 1080,
+  SITE_URL: "ken-mro.github.io/juni",
 };
 
 /* canvas 描画色。CSSの :root パレットと合わせて調整する */
@@ -782,10 +849,16 @@ const PALETTE = {
   PARTICLES: ["#ffd93d", "#4ff0e6", "#ff6fb5", "#ffffff"],
   DANGER_RGB: "255, 92, 122",
   FLOAT_WORD: "#ffd93d",
-  FLOAT_LEVEL: "#ffd93d",
-  FLOAT_SUB: "#d6d5ff",
   FLOAT_COMBO: "#4ff0e6",
   FLOAT_SPURT: "#ff5c7a",
+  FLOAT_PENALTY: "#ff5c7a",
+  /* 共有画像 */
+  SHARE_TEXT: "#ffffff",
+  SHARE_DIM: "#d6d5ff",
+  SHARE_ACCENT: "#ffd93d",
+  SHARE_RANK: "#4ff0e6",
+  SHARE_CELL: "rgba(255, 255, 255, 0.12)",
+  SHARE_BAD: "#ff5c7a",
 };
 
 /* 文字種ごとの追加アクション数(タップ回数)。難易度計算の基準 */
@@ -1025,6 +1098,31 @@ const LEVEL_POOLS = LEVELS.map((def) => LEXICON.filter((w) =>
   w.rows.every((r) => def.rows.includes(r)) && (w.flags & ~def.flags) === 0));
 console.log(`[語彙] レベル別プール: ${LEVEL_POOLS.map((p) => p.length).join(" / ")}`);
 
+/* ---- 難易度スケール。L1〜L5はテーブル、L6以降はレベルに比例して伸び続ける ---- */
+function speedScale(level) {
+  if (level <= 5) return CONFIG.LEVEL_SPEED[level - 1];
+  return CONFIG.LEVEL_SPEED[4] * (1 + (level - 5) * CONFIG.ENDLESS_SPEED_PER_LEVEL);
+}
+function spawnScale(level) {
+  if (level <= 5) return CONFIG.LEVEL_SPAWN[level - 1];
+  return Math.max(
+    CONFIG.LEVEL_SPAWN[4] * (1 - (level - 5) * CONFIG.ENDLESS_SPAWN_PER_LEVEL),
+    0.01);
+}
+/* そのレベルの出現間隔(秒)。下限あり */
+function spawnIntervalFor(level) {
+  return Math.max(CONFIG.SPAWN_INTERVAL * spawnScale(level), CONFIG.SPAWN_INTERVAL_MIN);
+}
+/* そのレベルの規定撃破数 = 1分間の出現予定数 × CLEAR_RATIO */
+function requiredKills(level) {
+  return Math.max(1, Math.round(CONFIG.TIME_LIMIT / spawnIntervalFor(level) * CONFIG.CLEAR_RATIO));
+}
+/* クリアタイム(秒) → ランク文字。しきい値を超えたら末尾 */
+function rankFor(time) {
+  return (CONFIG.RANKS.find(([max]) => time <= max) ?? CONFIG.RANKS.at(-1))[1];
+}
+const fmtTime = (t) => `${t.toFixed(2)}秒`;
+
 /* ---- キーパッド生成 (DOM) ---- */
 const padEl = document.getElementById("pad");
 const keyEls = {}; // 行ID → キー要素(ヒント表示で使う)
@@ -1046,6 +1144,17 @@ let fieldW = 0;
 let fieldH = 0;
 let stars = [];
 
+function makeStars(n, w, h) {
+  return Array.from({ length: n }, () => ({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    r: Math.random() * 1.4 + 0.3,
+    a: Math.random() * 0.5 + 0.25,
+    ph: Math.random() * Math.PI * 2,  // 瞬きの位相
+    sp: 1 + Math.random() * 2,        // 瞬きの速さ
+  }));
+}
+
 function resizeCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_DPR);
   fieldW = fieldEl.clientWidth;
@@ -1053,14 +1162,7 @@ function resizeCanvas() {
   cv.width = Math.round(fieldW * dpr);
   cv.height = Math.round(fieldH * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  stars = Array.from({ length: CONFIG.STAR_COUNT }, () => ({
-    x: Math.random() * fieldW,
-    y: Math.random() * fieldH,
-    r: Math.random() * 1.4 + 0.3,
-    a: Math.random() * 0.5 + 0.25,
-    ph: Math.random() * Math.PI * 2,  // 瞬きの位相
-    sp: 1 + Math.random() * 2,        // 瞬きの速さ
-  }));
+  stars = makeStars(CONFIG.STAR_COUNT, fieldW, fieldH);
 }
 
 new ResizeObserver(resizeCanvas).observe(fieldEl);
@@ -1073,8 +1175,8 @@ function hexToRgb(hex) {
 }
 const SKY_RGB = PALETTE.SKY.map((pair) => pair.map(hexToRgb));
 let sky = SKY_RGB[0].map((c) => [...c]); // 現在の [上, 下] RGB
-function skyTarget() {
-  return SKY_RGB[Math.min(game.level - 1, SKY_RGB.length - 1)];
+function skyFor(level) {
+  return SKY_RGB[Math.min(level - 1, SKY_RGB.length - 1)];
 }
 const rgbStr = (c) => `rgb(${c.map(Math.round).join(",")})`;
 
@@ -1089,23 +1191,6 @@ let particles = [];
 let spawnTimer = CONFIG.SPAWN_INTERVAL; // 起動直後に1体出す
 let dangerFlash = 0;
 let shake = 0; // 画面揺れの残り振幅(px)
-
-/* 難易度スケール。L1〜L5はテーブル、L6以降はレベルに比例して伸び続ける */
-function speedScale() {
-  if (game.level <= 5) return CONFIG.LEVEL_SPEED[game.level - 1];
-  return CONFIG.LEVEL_SPEED[4] * (1 + (game.level - 5) * CONFIG.ENDLESS_SPEED_PER_LEVEL);
-}
-function spawnScale() {
-  if (game.level <= 5) return CONFIG.LEVEL_SPAWN[game.level - 1];
-  return Math.max(
-    CONFIG.LEVEL_SPAWN[4] * (1 - (game.level - 5) * CONFIG.ENDLESS_SPAWN_PER_LEVEL),
-    0.01);
-}
-
-/* そのレベルで次に上がるのに必要な撃破数 */
-function killsToNext(level) {
-  return CONFIG.LEVEL_KILLS[level - 1] ?? CONFIG.ENDLESS_KILLS_PER_LEVEL;
-}
 
 let recentWords = []; // 直近に出題した読み(重複出題の回避用)
 
@@ -1145,7 +1230,7 @@ function spawnMeteor() {
     y: ry + 6, // 画面上部に全体が見える位置から落ち始める
 
     rx, ry,
-    speed: CONFIG.FALL_SPEED * speedScale() * speedJitter,
+    speed: CONFIG.FALL_SPEED * speedScale(game.level) * speedJitter,
     rot: Math.random() * Math.PI * 2,
     rotSpeed: (Math.random() * 2 - 1) * 0.3,
     /* 岩の輪郭(半径ジッタ)と、ヒビ・クレーターの乱数は生成時に固定 */
@@ -1178,21 +1263,6 @@ function spawnParticles(x, y, n) {
       life: 0.5 + Math.random() * 0.4,
       t: 0,
       r: 1.5 + Math.random() * 2.5,
-      color: pickColor(),
-    });
-  }
-}
-
-/* レベルアップ: 画面中央から輪状に放つ */
-function spawnRing(n) {
-  for (let i = 0; i < n; i++) {
-    const ang = (i / n) * Math.PI * 2;
-    const sp = 180 + Math.random() * 60;
-    particles.push({
-      x: fieldW / 2, y: fieldH * 0.4,
-      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-      life: 0.8 + Math.random() * 0.3, t: 0,
-      r: 2 + Math.random() * 2,
       color: pickColor(),
     });
   }
@@ -1300,15 +1370,11 @@ const SFX = (() => {
     },
     /* ミス入力: 短く低いブザー */
     miss() { tone(180, 0.14, { type: "square", vol: 0.18, slide: -60 }); },
-    /* 隕石着地: 軽い「ぽん」。ライフは減らないので警報にしない */
+    /* 隕石着地(撃破数−1): 落ちる2音。警報にはしない */
     land() {
       tone(320, 0.22, { vol: 0.4, slide: -200 });
+      tone(240, 0.2, { type: "triangle", vol: 0.2, slide: -120, delay: 0.1 });
       noise(0.16, { vol: 0.25, freq: 900 });
-    },
-    /* レベルアップ: 長三和音のアルペジオ + きらめき */
-    levelUp() {
-      melody([72, 76, 79, 84], 0.08, 0.25, { type: "triangle", vol: 0.25 });
-      tone(1568, 0.5, { type: "sine", vol: 0.12, slide: 500, delay: 0.3 });
     },
     /* コンボ節目: 高い完全五度の2音 */
     comboMilestone() {
@@ -1316,10 +1382,14 @@ const SFX = (() => {
     },
     /* ラストスパートの秒カウント */
     timeTick() { tone(1320, 0.05, { type: "triangle", vol: 0.16 }); },
-    /* 時間切れ: 上昇して終わる明るいジングル */
-    timeUp() {
+    /* クリア: 上昇して終わる明るいファンファーレ */
+    clear() {
       melody([67, 72, 76, 79], 0.12, 0.3, { type: "triangle", vol: 0.28, delay: 0.15 });
       [72, 76, 79, 84].forEach((m) => tone(midiHz(m), 0.9, { type: "triangle", vol: 0.12, delay: 0.65 }));
+    },
+    /* 時間切れ(未クリア): 控えめに下がる2音 */
+    fail() {
+      melody([67, 62], 0.28, 0.4, { type: "triangle", vol: 0.22, delay: 0.15 });
     },
     /* 記録更新: 駆け上がるきらめき */
     newRecord() {
@@ -1617,11 +1687,12 @@ const BGM = (() => {
    設定: 入力ガイド / ヒント / 効果音 / BGM / 開始レベル(localStorageに保存)
    ============================================================ */
 const SETTINGS_KEY = "juni.settings";
-const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1, practice: false };
+const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1 };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
 } catch {}
-delete settings.easy; // 旧バージョンのモード設定は捨てる
+delete settings.easy;     // 旧バージョンの設定は捨てる
+delete settings.practice;
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
 }
@@ -1647,29 +1718,26 @@ function recordInput(kana, dir, ok) {
   if (row) stats.rows[row][bucket]++; // 句読点・記号は行の統計に含めない
 }
 
-/* ---- ゲーム状態: 時間・レベル・コンボ ---- */
+/* ---- ゲーム状態: 時間・レベル(固定)・撃破数・コンボ ---- */
 const game = {
   combo: 0,
   maxCombo: 0,
-  destroyed: 0,
-  level: 1,
-  levelKills: 0,  // 現在のレベルで積んだ撃破数(次レベルまでの進行)
-  startLevel: 1,
-  practice: false, // 練習モード: レベル固定・時間無制限・記録なし
+  destroyed: 0,   // 撃破数。着地で1戻る
+  required: 1,    // このレベルの規定撃破数
+  level: 1,       // プレイ中は変わらない
   timeLeft: CONFIG.TIME_LIMIT,
-  elapsed: 0,     // 練習モードの経過秒
   spurt: false,   // ラストスパート演出に入ったか
   started: false, // スタートボタンを押すまでは動かさない
   over: false,
+  cleared: false,
   paused: false,  // 一時停止・設定画面を開いている間
 };
-let floaters = []; // フィールド上に浮かぶ文字(撃破した語・LEVEL UP・COMBO)
+let floaters = []; // フィールド上に浮かぶ文字(撃破した語・COMBO・ラスト10秒・-1)
 
-const hudEl = document.getElementById("hud");
 const hudTimeEl = document.getElementById("hud-time");
-const hudTimeLabelEl = document.getElementById("hud-time-label");
 const hudComboEl = document.getElementById("hud-combo");
 const hudLevelEl = document.getElementById("hud-level");
+const hudKillsEl = document.getElementById("hud-kills");
 const hudProgressEl = document.getElementById("hud-progress");
 const overlayEl = document.getElementById("overlay");
 
@@ -1681,16 +1749,15 @@ function bump(el, scale = 1.35) {
 
 function updateHud() {
   hudComboEl.textContent = game.combo;
-  hudLevelEl.textContent = game.level;
-  hudProgressEl.style.width =
-    `${Math.min(game.levelKills / killsToNext(game.level), 1) * 100}%`;
+  hudLevelEl.textContent = `LV ${game.level}`;
+  hudKillsEl.textContent = `${game.destroyed} / ${game.required}`;
+  hudProgressEl.style.width = `${Math.min(game.destroyed / game.required, 1) * 100}%`;
 }
 
 let shownSec = -1;      // 表示中の残り秒(毎フレームのDOM更新を避ける)
 let shownWarn = false;  // 赤点滅の表示状態
 function updateTimer() {
-  /* 練習モードは経過秒を数え上げる。通常は残り秒を数え下げる */
-  const sec = game.practice ? Math.floor(game.elapsed) : Math.max(0, Math.ceil(game.timeLeft));
+  const sec = Math.max(0, Math.ceil(game.timeLeft));
   const warn = game.spurt && !game.over;
   if (sec !== shownSec) {
     shownSec = sec;
@@ -1766,45 +1833,35 @@ function onDestroy(meteor) {
     x: meteor.x, y: meteor.y, text: meteor.word.display ?? meteor.word.reading,
     t: 0, life: 0.9, kind: "word",
   });
-  if (game.practice) return; // 練習モードはレベル固定
-  game.levelKills++;
-  while (game.levelKills >= killsToNext(game.level)) {
-    game.levelKills -= killsToNext(game.level);
-    game.level++;
-    floaters.push({
-      x: fieldW / 2, y: fieldH * 0.38,
-      text: `LEVEL ${game.level}`, sub: levelLabel(game.level),
-      t: 0, life: 1.8, kind: "level",
-    });
-    spawnRing(CONFIG.RING_PARTICLES);
-    SFX.levelUp();
-    bump(hudLevelEl, 1.5);
-  }
+  bump(hudKillsEl, 1.2);
+  if (game.destroyed >= game.required) finishGame(true);
 }
 
-/* 着地: ライフはない。画面が揺れてコンボが切れるだけ */
+/* 着地: 撃破数が1戻る(0未満にはならない)。コンボも切れて画面が揺れる */
 function onLanded(meteor) {
   dangerFlash = 1;
   shake = CONFIG.SHAKE_AMP;
   game.combo = 0;
+  if (game.destroyed > 0) {
+    game.destroyed--;
+    floaters.push({ x: meteor.x, y: fieldH - 40, text: "-1", t: 0, life: 1.0, kind: "penalty" });
+  }
   SFX.land();
   updateHud();
 }
 
-/* ---- 記録: 自己ベスト(到達レベル・撃破数・最大コンボ) ---- */
-const BEST_KEY = "juni.best";
-function loadBest() {
-  try {
-    const b = JSON.parse(localStorage.getItem(BEST_KEY));
-    return { level: 0, destroyed: 0, maxCombo: 0, ...(b ?? {}) };
-  } catch { return { level: 0, destroyed: 0, maxCombo: 0 }; } // プライベートモード等
+/* ---- 記録: レベルごとのベストタイムと、そのときのプレー結果 ---- */
+const RECORDS_KEY = "juni.records";
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem(RECORDS_KEY)) ?? {}; }
+  catch { return {}; } // プライベートモード等
 }
-function saveBest(b) {
-  try { localStorage.setItem(BEST_KEY, JSON.stringify(b)); } catch {}
+function saveRecords(r) {
+  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(r)); } catch {}
 }
-/* 到達レベル → ランク文字 */
-function rankFor(level) {
-  return (CONFIG.RANKS.find(([min]) => level >= min) ?? CONFIG.RANKS.at(-1))[1];
+/* クリア済みの最高レベル(未クリアなら0) */
+function maxClearedLevel(records = loadRecords()) {
+  return Object.keys(records).reduce((m, k) => Math.max(m, Number(k)), 0);
 }
 
 /* 正答率(%)。試行がなければ null */
@@ -1823,28 +1880,20 @@ function arrowHtml(cur, prev) {
   return cur > prev ? '<i class="up">↑</i>' : '<i class="down">↓</i>';
 }
 
-/* 成長の記録: ゲームごとの結果と行別正答率を残す(直近20回) */
-const HISTORY_KEY = "juni.history";
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) ?? []; }
-  catch { return []; }
-}
-function saveHistory(h) {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-20))); } catch {}
-}
-
-function renderResultStats(prev) {
-  /* 行別 正答率: 低い行ほど強調。↑↓は前回プレイとの比較 */
+/* 行別 正答率 / 方向別 ミス率。st は {rows, dirs}(ok/ng)、prev は比較対象の同形(省略可) */
+function renderResultStats(st, prev) {
+  /* 行別 正答率: 低い行ほど強調。↑↓はベスト記録との比較 */
   document.getElementById("go-rows").innerHTML = ALL_ROWS.map((r) => {
-    const acc = accuracy(stats.rows[r]);
+    const acc = accuracy(st.rows[r]);
     const cls = acc === null ? "na" : acc < 70 ? "bad" : acc < 90 ? "warn" : "";
-    const arrow = acc === null ? "" : arrowHtml(acc, prev?.rows?.[r]);
+    const prevAcc = prev?.rows?.[r] ? accuracy(prev.rows[r]) : null;
+    const arrow = acc === null ? "" : arrowHtml(acc, prevAcc);
     return statCell(r, acc === null ? "—" : `${acc}%${arrow}`, cls);
   }).join("");
 
   /* 方向別 ミス率: 十字配置。「下フリックが弱い」を可視化する */
   const dirCell = (dir, label) => {
-    const s = stats.dirs[dir];
+    const s = st.dirs[dir];
     const total = s.ok + s.ng;
     const miss = total ? Math.round((s.ng / total) * 100) : null;
     const cls = miss === null ? "na" : miss >= 30 ? "bad" : miss >= 10 ? "warn" : "";
@@ -1857,74 +1906,81 @@ function renderResultStats(prev) {
   ].join("");
 }
 
-/* 終了: 結果を集計してリザルトを出す。
-   通常は時間切れで呼ばれ、記録(自己ベスト・履歴)を更新する。
-   練習モードは一時停止メニューから呼ばれ、記録は残さず統計だけ見せる */
-function finishGame() {
-  game.over = true;
-  hudTimeEl.classList.remove("warn");
-  SFX.timeUp();
-  BGM.stop(); // ジングルの邪魔をしないようフェードアウト
-  overlayEl.classList.toggle("practice", game.practice);
-  document.getElementById("go-hero").classList.toggle("practice", game.practice);
-  document.getElementById("go-title").textContent = game.practice ? "おつかれさま" : "TIME UP!";
-  document.getElementById("go-level-label").textContent = game.practice ? "練習したレベル" : "到達レベル";
-  document.getElementById("go-level").textContent = game.level;
-
-  if (game.practice) {
-    document.getElementById("go-newbest").classList.add("hidden");
-    document.getElementById("go-destroyed").textContent = game.destroyed;
-    document.getElementById("go-combo").textContent = game.maxCombo;
-    renderResultStats(loadHistory().at(-1) ?? null); // 前回の本番との比較は出す
-    overlayEl.classList.remove("hidden");
-    return;
-  }
-
-  const best = loadBest();
-  const isNewBest = game.level > best.level ||
-    (game.level === best.level && game.destroyed > best.destroyed);
-  const nextBest = {
-    level: isNewBest ? game.level : best.level,
-    destroyed: isNewBest ? game.destroyed : best.destroyed,
-    maxCombo: Math.max(best.maxCombo, game.maxCombo),
-  };
-  saveBest(nextBest);
-  const history = loadHistory();
-  const prev = history.at(-1) ?? null;
-  document.getElementById("go-rank").textContent = rankFor(game.level);
+/* リザルト表示。mode: "clear"(今クリア) / "fail"(時間切れ) / "view"(記録の閲覧)
+   rec: { level, time, maxCombo, destroyed, required, rows, dirs }
+   opts: { prev(比較する前ベスト), isNewBest, best(表示するベスト記録) } */
+let currentResult = null; // 共有画像の対象
+function showResult(rec, mode, { prev = null, isNewBest = false, best = null } = {}) {
+  currentResult = rec;
+  const cleared = mode !== "fail";
+  const titleEl = document.getElementById("go-title");
+  titleEl.textContent = cleared ? "CLEAR!" : "TIME UP…";
+  titleEl.classList.toggle("grad", cleared);
+  titleEl.classList.toggle("fail", !cleared);
+  document.getElementById("go-hero").classList.toggle("fail", !cleared);
+  document.getElementById("go-hero-label").textContent = cleared ? "クリアタイム" : "撃破 / 規定";
+  document.getElementById("go-main").innerHTML = cleared
+    ? `${rec.time.toFixed(2)}<small>秒</small>`
+    : `${rec.destroyed}<small>/ ${rec.required}</small>`;
+  document.getElementById("go-rank-wrap").classList.toggle("hidden", !cleared);
+  if (cleared) document.getElementById("go-rank").textContent = rankFor(rec.time);
   document.getElementById("go-newbest").classList.toggle("hidden", !isNewBest);
-  document.getElementById("go-best").textContent = `LEVEL ${nextBest.level}`;
-  document.getElementById("go-destroyed").innerHTML =
-    `${game.destroyed}${arrowHtml(game.destroyed, prev?.destroyed)}`;
-  document.getElementById("go-combo").innerHTML =
-    `${game.maxCombo}${arrowHtml(game.maxCombo, prev?.maxCombo)}`;
-  renderResultStats(prev);
-  history.push({
-    t: Date.now(),
-    level: game.level,
-    destroyed: game.destroyed,
-    maxCombo: game.maxCombo,
-    rows: Object.fromEntries(ALL_ROWS.map((r) => [r, accuracy(stats.rows[r])])),
-  });
-  saveHistory(history);
-  if (isNewBest) {
-    spawnConfetti(CONFIG.CONFETTI);
-    SFX.newRecord();
-  }
+  document.getElementById("go-level").textContent = rec.level;
+  document.getElementById("go-best-row").classList.toggle("hidden", !best);
+  if (best) document.getElementById("go-best").textContent = fmtTime(best.time);
+  document.getElementById("go-combo").textContent = rec.maxCombo;
+  renderResultStats(rec, prev);
+  document.getElementById("go-next").classList.toggle("hidden", mode !== "clear");
+  document.getElementById("go-retry").classList.toggle("hidden", mode !== "fail");
+  document.getElementById("go-share").classList.toggle("hidden", !cleared);
+  document.getElementById("go-close").textContent = mode === "view" ? "閉じる" : "タイトルへ";
   overlayEl.classList.remove("hidden");
 }
 
-function restart() {
+/* 終了: クリア(規定数到達)または時間切れ。クリア時のみ記録を更新する */
+function finishGame(cleared) {
+  game.over = true;
+  game.cleared = cleared;
+  hudTimeEl.classList.remove("warn");
+  BGM.stop(); // ジングルの邪魔をしないようフェードアウト
+  const records = loadRecords();
+  const prev = records[game.level] ?? null;
+  const rec = {
+    level: game.level,
+    time: Math.round((CONFIG.TIME_LIMIT - game.timeLeft) * 100) / 100,
+    maxCombo: game.maxCombo,
+    destroyed: game.destroyed,
+    required: game.required,
+    rows: stats.rows,
+    dirs: stats.dirs,
+    t: Date.now(),
+  };
+  if (!cleared) {
+    SFX.fail();
+    showResult(rec, "fail", { prev, best: prev });
+    return;
+  }
+  SFX.clear();
+  const isNewBest = !prev || rec.time < prev.time;
+  if (isNewBest) {
+    records[game.level] = rec;
+    saveRecords(records);
+    spawnConfetti(CONFIG.CONFETTI);
+    SFX.newRecord();
+  }
+  showResult(rec, "clear", { prev, isNewBest, best: isNewBest ? rec : prev });
+}
+
+/* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理) */
+function startLevel(level) {
+  settings.startLevel = level;
+  saveSettings();
   Object.assign(game, {
     combo: 0, maxCombo: 0, destroyed: 0,
-    level: settings.startLevel, levelKills: 0, startLevel: settings.startLevel,
-    practice: settings.practice,
-    timeLeft: CONFIG.TIME_LIMIT, elapsed: 0, spurt: false,
-    started: true, over: false, paused: false,
+    level, required: requiredKills(level),
+    timeLeft: CONFIG.TIME_LIMIT, spurt: false,
+    started: true, over: false, cleared: false, paused: false,
   });
-  hudEl.classList.toggle("practice", game.practice);
-  hudTimeLabelEl.textContent = game.practice ? "PRACTICE" : "TIME";
-  pauseFinishEl.classList.toggle("hidden", !game.practice);
   meteors = [];
   particles = [];
   floaters = [];
@@ -1934,23 +1990,45 @@ function restart() {
   spawnTimer = CONFIG.SPAWN_INTERVAL;
   shake = 0;
   dangerFlash = 0;
-  sky = skyTarget().map((c) => [...c]); // 開始レベルの空色から始める
   overlayEl.classList.add("hidden");
-  if (settings.bgm) BGM.start(); // リトライ(ユーザー操作)の中でBGMを再開
+  if (settings.bgm) BGM.start(); // ユーザー操作の中で呼ばれる前提
   updateHud();
   shownSec = -1;
   updateTimer();
 }
 /* 状態を全リセットしてタイトル画面に戻る */
 function goToTitle() {
-  restart();             // リセット(各オーバーレイも閉じる)
-  game.started = false;  // タイトル画面で待機
-  renderLevelPicker();   // 直前のプレイで解放レベルが増えていれば反映
+  Object.assign(game, {
+    combo: 0, maxCombo: 0, destroyed: 0,
+    level: settings.startLevel, required: requiredKills(settings.startLevel),
+    timeLeft: CONFIG.TIME_LIMIT, spurt: false,
+    started: false, over: false, cleared: false, paused: false,
+  });
+  meteors = [];
+  particles = [];
+  floaters = [];
+  lockedTarget = null;
+  BGM.stop(0.4);
+  overlayEl.classList.add("hidden");
+  renderLevelPicker(); // 直前のプレイで解放レベルが増えていれば反映
   document.getElementById("start").classList.remove("hidden");
+  updateHud();
+  shownSec = -1;
+  updateTimer();
 }
+
+document.getElementById("go-next").addEventListener("click", () => {
+  SFX.ensure();
+  startLevel(game.level + 1);
+});
 document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
-  goToTitle();
+  startLevel(game.level);
+});
+document.getElementById("go-close").addEventListener("click", () => {
+  SFX.ensure();
+  if (game.started) goToTitle();
+  else overlayEl.classList.add("hidden"); // 記録の閲覧: タイトルはその下に残っている
 });
 
 /* ---- スタート画面: 開始レベル選択 + ボタンで開始(この操作でオーディオも起動) ---- */
@@ -1958,14 +2036,11 @@ const startEl = document.getElementById("start");
 const pickerEl = document.getElementById("level-picker");
 const levelDescEl = document.getElementById("level-desc");
 const startBestEl = document.getElementById("start-best");
-
-/* 解放されている最大の開始レベル。自己ベスト − OFFSET(最低1・上限なし) */
-function maxStartLevel() {
-  return Math.max(1, loadBest().level - CONFIG.START_LEVEL_UNLOCK_OFFSET);
-}
+const btnRecordsEl = document.getElementById("btn-records");
 
 function renderLevelPicker() {
-  const unlocked = maxStartLevel();
+  const records = loadRecords();
+  const unlocked = maxClearedLevel(records) + 1; // クリア済みの次まで(上限なし)
   settings.startLevel = Math.min(Math.max(settings.startLevel, 1), unlocked);
   pickerEl.innerHTML = "";
   /* 最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
@@ -1975,7 +2050,8 @@ function renderLevelPicker() {
     const b = document.createElement("button");
     b.className = "lv" + (lv > unlocked ? " locked" : "") + (lv === settings.startLevel ? " active" : "");
     b.dataset.level = lv;
-    b.textContent = lv;
+    const best = records[lv];
+    b.innerHTML = `${lv}<small>${best ? best.time.toFixed(1) + "s" : ""}</small>`;
     if (lv > unlocked) b.disabled = true;
     if (lv === settings.startLevel) activeEl = b;
     pickerEl.appendChild(b);
@@ -1983,12 +2059,15 @@ function renderLevelPicker() {
   activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
   /* スクロールが生じるときだけ右余白を取る(スクロールバーと番号の重なり防止) */
   pickerEl.classList.toggle("scrolls", pickerEl.scrollHeight > pickerEl.clientHeight + 1);
-  levelDescEl.textContent = `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)}`;
-  const best = loadBest();
-  startBestEl.textContent = best.level ? `LEVEL ${best.level}` : "—";
+  levelDescEl.textContent =
+    `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)} ／ 規定 ${requiredKills(settings.startLevel)}個`;
+  const top = maxClearedLevel(records);
+  startBestEl.textContent = top ? `LEVEL ${top}` : "—";
+  btnRecordsEl.disabled = top === 0;
   /* タイトル待機中は背後のHUDと空色も選んだレベルに追従させる */
   if (!game.started) {
     game.level = settings.startLevel;
+    game.required = requiredKills(game.level);
     updateHud();
   }
 }
@@ -2000,37 +2079,181 @@ pickerEl.addEventListener("click", (e) => {
   renderLevelPicker();
 });
 renderLevelPicker();
-sky = skyTarget().map((c) => [...c]); // 起動直後は空色をなじませず即座に合わせる
+sky = skyFor(game.level).map((c) => [...c]); // 起動直後は空色をなじませず即座に合わせる
 updateTimer();
 
-/* 練習モードのトグル: レベル固定・時間無制限・記録なし */
-const stPracticeEl = document.getElementById("st-practice");
-const btnStartEl = document.getElementById("btn-start");
-function syncPractice() {
-  stPracticeEl.checked = settings.practice;
-  btnStartEl.textContent = settings.practice ? "練習スタート" : "スタート";
-}
-stPracticeEl.addEventListener("change", () => {
-  settings.practice = stPracticeEl.checked;
-  saveSettings();
-  syncPractice();
-});
-syncPractice();
-
-btnStartEl.addEventListener("click", () => {
+document.getElementById("btn-start").addEventListener("click", () => {
   SFX.ensure();
-  restart();
+  startLevel(settings.startLevel);
   startEl.classList.add("hidden");
 });
 
-/* ---- 一時停止: 再開 / (練習のみ)終了して結果 / 最初からやり直す ---- */
-const pauseEl = document.getElementById("pause");
-const pauseFinishEl = document.getElementById("btn-pause-finish");
-pauseFinishEl.addEventListener("click", () => {
-  pauseEl.classList.add("hidden");
-  game.paused = false;
-  finishGame();
+/* ---- 記録一覧: クリア済みレベルのベストタイム。タップで当時の結果を表示 ---- */
+const recordsEl = document.getElementById("records");
+const recordsListEl = document.getElementById("records-list");
+function openRecords() {
+  const records = loadRecords();
+  const levels = Object.keys(records).map(Number).sort((a, b) => a - b);
+  document.getElementById("records-empty").classList.toggle("hidden", levels.length > 0);
+  recordsListEl.innerHTML = "";
+  for (const lv of levels) {
+    const r = records[lv];
+    const b = document.createElement("button");
+    b.className = "rec";
+    b.dataset.level = lv;
+    b.innerHTML = `<span class="rec-lv">LEVEL ${lv}</span><span class="rec-time">${fmtTime(r.time)}</span><span class="rec-rank">${rankFor(r.time)}</span>`;
+    recordsListEl.appendChild(b);
+  }
+  recordsEl.classList.remove("hidden");
+}
+btnRecordsEl.addEventListener("click", openRecords);
+recordsListEl.addEventListener("click", (e) => {
+  const b = e.target.closest(".rec");
+  if (!b) return;
+  const rec = loadRecords()[b.dataset.level];
+  if (!rec) return;
+  recordsEl.classList.add("hidden");
+  showResult(rec, "view", { best: rec });
 });
+document.getElementById("rc-close").addEventListener("click", () => recordsEl.classList.add("hidden"));
+
+/* ============================================================
+   SNS共有画像: プレー結果を正方形の1枚絵に描く(外部依存なし・canvas)
+   ============================================================ */
+function buildShareImage(rec) {
+  const W = CONFIG.SHARE_W, H = CONFIG.SHARE_H;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d");
+  const [top, bottom] = skyFor(rec.level);
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, rgbStr(top));
+  grad.addColorStop(1, rgbStr(bottom));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = PALETTE.STAR;
+  for (const s of makeStars(160, W, H)) {
+    g.globalAlpha = s.a;
+    g.beginPath();
+    g.arc(s.x, s.y, s.r * 2.2, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalAlpha = 1;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+
+  const FONT_D = "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif";
+  const FONT_U = "'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif";
+  const spaced = (text, x, y, spacing) => { // 字間を空けて中央に描く
+    const widths = [...text].map((ch) => g.measureText(ch).width);
+    const total = widths.reduce((a, b) => a + b, 0) + spacing * (widths.length - 1);
+    let cx = x - total / 2;
+    [...text].forEach((ch, i) => {
+      g.fillText(ch, cx + widths[i] / 2, y);
+      cx += widths[i] + spacing;
+    });
+  };
+
+  /* タイトル */
+  g.fillStyle = PALETTE.SHARE_TEXT;
+  g.font = `600 118px ${FONT_D}`;
+  spaced("十二", W / 2, 150, 40);
+  g.fillStyle = PALETTE.SHARE_DIM;
+  g.font = `600 26px ${FONT_U}`;
+  spaced("JŪNI", W / 2, 232, 14);
+
+  /* 見出し: LEVEL n CLEAR */
+  g.fillStyle = PALETTE.SHARE_ACCENT;
+  g.font = `800 58px ${FONT_U}`;
+  g.fillText(`LEVEL ${rec.level}  CLEAR`, W / 2, 340);
+
+  /* クリアタイム(主役) */
+  g.fillStyle = PALETTE.SHARE_TEXT;
+  g.font = `800 210px ${FONT_U}`;
+  const timeStr = rec.time.toFixed(2);
+  const tw = g.measureText(timeStr).width;
+  g.fillText(timeStr, W / 2 - 30, 520);
+  g.font = `700 54px ${FONT_U}`;
+  g.fillStyle = PALETTE.SHARE_DIM;
+  g.textAlign = "left";
+  g.fillText("秒", W / 2 - 30 + tw / 2 + 18, 560);
+  g.textAlign = "center";
+
+  /* ランク・コンボ */
+  g.fillStyle = PALETTE.SHARE_RANK;
+  g.font = `600 44px ${FONT_D}`;
+  spaced(`RANK ${rankFor(rec.time)}`, W / 2, 660, 10);
+  g.fillStyle = PALETTE.SHARE_DIM;
+  g.font = `600 36px ${FONT_U}`;
+  g.fillText(`最大コンボ ${rec.maxCombo}`, W / 2, 730);
+
+  /* 行別正答率: 10マス */
+  const cellW = 92, cellH = 96, gap = 8;
+  const x0 = (W - (cellW * 10 + gap * 9)) / 2;
+  const y0 = 800;
+  ALL_ROWS.forEach((r, i) => {
+    const x = x0 + i * (cellW + gap);
+    const acc = accuracy(rec.rows[r]);
+    g.fillStyle = PALETTE.SHARE_CELL;
+    g.beginPath();
+    g.roundRect(x, y0, cellW, cellH, 12);
+    g.fill();
+    g.fillStyle = PALETTE.SHARE_DIM;
+    g.font = `600 30px ${FONT_U}`;
+    g.fillText(r, x + cellW / 2, y0 + 30);
+    g.fillStyle = acc === null ? PALETTE.SHARE_DIM : acc < 70 ? PALETTE.SHARE_BAD : acc < 90 ? PALETTE.SHARE_ACCENT : PALETTE.SHARE_TEXT;
+    g.font = `700 28px ${FONT_U}`;
+    g.fillText(acc === null ? "—" : `${acc}%`, x + cellW / 2, y0 + 68);
+  });
+
+  /* フッター */
+  g.fillStyle = PALETTE.SHARE_TEXT;
+  g.font = `600 34px ${FONT_U}`;
+  g.fillText("フリック入力で地球を守れ", W / 2, 975);
+  g.fillStyle = PALETTE.SHARE_DIM;
+  g.font = `500 30px ${FONT_U}`;
+  g.fillText(CONFIG.SITE_URL, W / 2, 1030);
+  return c;
+}
+
+/* 共有: Web Share API(共有シート)が使えればそれで。使えなければ画像を表示して長押し保存/ダウンロード */
+const shareEl = document.getElementById("share");
+const shareImgEl = document.getElementById("share-img");
+const shareDlEl = document.getElementById("share-dl");
+let shareUrl = null;
+async function shareResult() {
+  const rec = currentResult;
+  if (!rec) return;
+  const canvas = buildShareImage(rec);
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  if (!blob) return;
+  const name = `juni-level${rec.level}.png`;
+  const text = `十二 JŪNI — LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
+  if (typeof File === "function" && navigator.canShare) {
+    const file = new File([blob], name, { type: "image/png" });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], text });
+        return;
+      } catch (e) {
+        if (e.name === "AbortError") return; // ユーザーが共有を取り消した
+        // それ以外はフォールバックへ
+      }
+    }
+  }
+  if (shareUrl) URL.revokeObjectURL(shareUrl);
+  shareUrl = URL.createObjectURL(blob);
+  shareImgEl.src = shareUrl;
+  shareDlEl.href = shareUrl;
+  shareDlEl.download = name;
+  shareEl.classList.remove("hidden");
+}
+document.getElementById("go-share").addEventListener("click", shareResult);
+document.getElementById("share-close").addEventListener("click", () => shareEl.classList.add("hidden"));
+
+/* ---- 一時停止: 再開 or 最初からやり直す ---- */
+const pauseEl = document.getElementById("pause");
 document.getElementById("btn-pause").addEventListener("click", () => {
   if (!game.started || game.over) return;
   game.paused = true;
@@ -2083,7 +2306,7 @@ stBgmEl.addEventListener("change", () => {
   settings.bgm = stBgmEl.checked;
   if (settings.bgm) {
     SFX.ensure(); // トグル操作もユーザー操作なのでここで起動できる
-    BGM.start();
+    if (game.started && !game.over) BGM.start();
   } else {
     BGM.stop(0.4);
   }
@@ -2093,30 +2316,25 @@ stBgmEl.addEventListener("change", () => {
 /* ---- 更新と描画 ---- */
 function update(dt) {
   if (game.started && !game.over && !game.paused) {
-    if (game.practice) {
-      game.elapsed += dt; // 練習モード: 時間無制限。経過だけ数える
-    } else {
-      /* 残り時間。ラストスパート突入は1回だけ、秒が変わるごとにカウント音 */
-      const prevSec = Math.ceil(game.timeLeft);
-      game.timeLeft -= dt;
-      const sec = Math.ceil(game.timeLeft);
-      if (!game.spurt && game.timeLeft <= CONFIG.LAST_SPURT) {
-        game.spurt = true;
-        floaters.push({
-          x: fieldW / 2, y: fieldH * 0.28, text: `ラスト${CONFIG.LAST_SPURT}秒！`,
-          t: 0, life: 1.4, kind: "spurt",
-        });
-      }
-      if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
-      if (game.timeLeft <= 0) {
-        game.timeLeft = 0;
-        finishGame();
-      }
+    /* 残り時間。ラストスパート突入は1回だけ、秒が変わるごとにカウント音 */
+    const prevSec = Math.ceil(game.timeLeft);
+    game.timeLeft -= dt;
+    const sec = Math.ceil(game.timeLeft);
+    if (!game.spurt && game.timeLeft <= CONFIG.LAST_SPURT) {
+      game.spurt = true;
+      floaters.push({
+        x: fieldW / 2, y: fieldH * 0.28, text: `ラスト${CONFIG.LAST_SPURT}秒！`,
+        t: 0, life: 1.4, kind: "spurt",
+      });
+    }
+    if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
+    if (game.timeLeft <= 0) {
+      game.timeLeft = 0;
+      finishGame(false);
     }
 
     spawnTimer += dt;
-    const interval = Math.max(
-      CONFIG.SPAWN_INTERVAL * spawnScale(), CONFIG.SPAWN_INTERVAL_MIN);
+    const interval = spawnIntervalFor(game.level);
     /* 場が薄ければ間隔を待たずに補充する(1分間、手持ち無沙汰を作らない) */
     const short = meteors.length < CONFIG.METEOR_MIN && spawnTimer >= CONFIG.SPAWN_MIN_GAP;
     if (!game.over && (meteors.length === 0 || short ||
@@ -2150,7 +2368,7 @@ function update(dt) {
   dangerFlash = Math.max(0, dangerFlash - dt * 1.5);
   shake = Math.max(0, shake - dt * CONFIG.SHAKE_DECAY);
   /* 空の色を目標へなじませる */
-  const tg = skyTarget();
+  const tg = skyFor(game.level);
   const k = Math.min(1, dt * CONFIG.SKY_LERP);
   for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) sky[i][j] += (tg[i][j] - sky[i][j]) * k;
   updateTimer();
@@ -2248,7 +2466,6 @@ function drawMeteor(m) {
 }
 
 const FONT_UI = "'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif";
-const FONT_DISPLAY = "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif";
 
 function draw() {
   const grad = ctx.createLinearGradient(0, 0, 0, fieldH);
@@ -2285,20 +2502,15 @@ function draw() {
   ctx.textAlign = "center";
   for (const f of floaters) {
     ctx.globalAlpha = 1 - f.t / f.life;
-    if (f.kind === "level") {
-      ctx.fillStyle = PALETTE.FLOAT_LEVEL;
-      ctx.font = `32px ${FONT_DISPLAY}`;
-      ctx.fillText(f.text, f.x, f.y);
-      if (f.sub) {
-        ctx.font = `13px ${FONT_UI}`;
-        ctx.fillStyle = PALETTE.FLOAT_SUB;
-        ctx.fillText(f.sub, f.x, f.y + 24);
-      }
-    } else if (f.kind === "combo" || f.kind === "spurt") {
+    if (f.kind === "combo" || f.kind === "spurt") {
       /* 出た瞬間に少し大きく、すぐ定位置へ縮む */
       const pop = 1 + Math.max(0, 0.25 - f.t) * 2;
       ctx.fillStyle = f.kind === "combo" ? PALETTE.FLOAT_COMBO : PALETTE.FLOAT_SPURT;
       ctx.font = `800 ${Math.round(22 * pop)}px ${FONT_UI}`;
+      ctx.fillText(f.text, f.x, f.y);
+    } else if (f.kind === "penalty") {
+      ctx.fillStyle = PALETTE.FLOAT_PENALTY;
+      ctx.font = `800 22px ${FONT_UI}`;
       ctx.fillText(f.text, f.x, f.y);
     } else {
       ctx.fillStyle = PALETTE.FLOAT_WORD;
@@ -2309,7 +2521,7 @@ function draw() {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したらコンボが切れる */
+  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したら撃破数が1戻る */
   ctx.fillStyle = `rgba(${PALETTE.DANGER_RGB}, ${0.35 + dangerFlash * 0.65})`;
   const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
   ctx.fillRect(0, fieldH - lh, fieldW, lh);
@@ -2403,7 +2615,7 @@ function highlightGuide(g, dir) {
 
 padEl.addEventListener("pointerdown", (e) => {
   SFX.ensure(); // AudioContextはユーザー操作の中でしか起こせない
-  if (settings.bgm && game.started && !game.over) BGM.start(); // 初回タッチでBGM開始(再生中の呼び出しは何もしない)
+  if (settings.bgm && game.started && !game.over) BGM.start(); // 再生中の呼び出しは何もしない
   const key = e.target.closest(".key");
   if (!key) return;
   key.setPointerCapture(e.pointerId);

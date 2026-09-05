@@ -34,7 +34,7 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 4. **単語データ `WORDS`**: `"よみ|表記"` 形式のベタ書き（約600語、宇宙系2割。レベル別プールの順に並べてある）。起動時に `validateReading`（不正文字・`METEOR_MAX_LEN` 超え・語頭の ん/を/ー/小文字）と読みの重複を検査し、不正語は `console.warn` してスキップ。かなの網羅状況（未出現のかな・語頭に立たない清音）を `console.info` で報告する。各語に `first`（先頭のひらがな）と `firstToken`（先頭の入力トークン）を付与
 5. **語彙モジュール**: `toBase` / `rowOf` / `extraCost` / `analyze`（`actions`=実フリック回数が難易度基準）
 6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `LEVEL_POOLS`（起動時確定）。`speedScale(level)` / `spawnScale(level)` / `spawnIntervalFor(level)` / `requiredKills(level)` はレベルを引数に取る純関数。L6以降は速度と出現頻度が上がり続け、規定数も増える
-7. **ロゴ**: `logoRuns()` が `LOGO`/`PIXEL_FONT` から「FLICK IMPACT」2段のドット配置（横連続をまとめた矩形）を作る。`buildLogoSvg()` は HUD とタイトル画面に入れる SVG 文字列（影＋グラデーション。塗りは CSS 変数）、`drawLogo()` は共有画像用に canvas へ同じ配置を描く。favicon は `<head>` の data URI（16×16 ドット絵: 隕石にフリックの矢印が命中）
+7. **ロゴ**: `logoRuns()` が `LOGO`/`PIXEL_FONT` から「FLICK IMPACT」2段のドット配置（横連続をまとめた矩形）を作る。`buildLogoSvg()` は HUD とタイトル画面に入れる SVG 文字列（影＋グラデーション。塗りは CSS 変数）、`drawLogo()` は共有画像用に canvas へ同じ配置を描く。favicon は `<head>` の data URI（SVG: 「あ」の隕石にフリックの矢印が命中）
 8. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす
 9. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
 10. **ゲーム状態・入力・UI配線**: `game`（`timeLeft`/`level`/`destroyed`/`required`/`combo`）、統計 `stats`、記録 `juni.records`、`showResult(rec, mode)`（clear / fail / view の3モード）、`finishGame(cleared)`、`startLevel(level)`、開始レベル選択、記録一覧、共有画像 `buildShareImage` / `shareResult`

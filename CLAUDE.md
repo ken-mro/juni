@@ -31,7 +31,7 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 1. **CSS**: `:root` トークン（縦配分 `--pad-h`、開始レベル選択の寸法 `--lv-*`、パレット。基調は「ビビッドな宇宙」= 深い紫 `--bg-deep` × 星の黄 `--ember: #ffd93d`、副アクセントに `--cyan` / `--pink`。明朝体はタイトル・ランクのみ）。オーバーレイは `.modal` / `.panel` を共用
 2. **CONFIG / PALETTE / COST**: 全調整値。`FLICK_THRESHOLD`、`TIME_LIMIT`（60秒）、`CLEAR_RATIO`（規定数係数）、落下・出現カーブ、`RANKS`（クリアタイムのしきい値）、共有画像サイズ、音量など。`PALETTE.SKY` はレベル別の空の色、`PALETTE.SHARE_*` は共有画像の色
 3. **入力データ**: `KEY_LAYOUT`（3×4キー）、`FLICK_MAP`（キー行→[中央,左,上,右,下]、nullは無反応）、`CYCLES`（小゛゜の変換循環 か→が、は→ば→ぱ、つ→っ→づ）
-4. **単語データ `WORDS`**: `"よみ|表記"` 形式のベタ書き（約210語、宇宙系2割）。起動時に `validateReading` で検査し不正語は `console.warn` してスキップ
+4. **単語データ `WORDS`**: `"よみ|表記"` 形式のベタ書き（約600語、宇宙系2割。レベル別プールの順に並べてある）。起動時に `validateReading`（不正文字・`METEOR_MAX_LEN` 超え・語頭の ん/を/ー/小文字）と読みの重複を検査し、不正語は `console.warn` してスキップ。かなの網羅状況（未出現のかな・語頭に立たない清音）を `console.info` で報告する。各語に `first`（先頭のひらがな）と `firstToken`（先頭の入力トークン）を付与
 5. **語彙モジュール**: `toBase` / `rowOf` / `extraCost` / `analyze`（`actions`=実フリック回数が難易度基準）
 6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `LEVEL_POOLS`（起動時確定）。`speedScale(level)` / `spawnScale(level)` / `spawnIntervalFor(level)` / `requiredKills(level)` はレベルを引数に取る純関数。L6以降は速度と出現頻度が上がり続け、規定数も増える
 7. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす
@@ -42,7 +42,8 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 
 - **`FLICK_MAP` が唯一の真実**。かな→行の対応（`KANA_ROW`）、語彙バリデーション、次キーヒントはすべてここから導出される。キー配置を変えるときは他を触らない
 - **入力の展開モデル**: 各文字は実際の打鍵列に展開される（が=[か,゛]、ぱ=[は,゛,゛]、っ=[つ,゛]）。展開は `CYCLES` の位置から決まる。一方スコア用の `COST`（濁1/半濁2/小1）は仕様の規定値で、実打鍵数と一致しない文字（づ）があるが**仕様が優先**
-- **ターゲティング**: 最初に一致した入力で隕石にロックされ、破壊・着地まで対象は変わらない。出題時は場の隕石と先頭入力トークンが重複しない語を選ぶ（表示文字でなくトークン基準）。直近10語は再出題しない
+- **ターゲティング**: 最初に一致した入力で隕石にロックされ、破壊・着地まで対象は変わらない。出題時は場の隕石と先頭入力トークンが重複しない語を選ぶ（表示文字でなくトークン基準）
+- **出題規則**（`pickWord`）: 候補をフィルタして一様に選ぶ。第1候補は「語頭のひらがな（が≠か）が直近 `RECENT_FIRST_KANA` 語に出ていない ∧ 場内トークン重複なし ∧ 同じ語が直近 `RECENT_WORDS` 語に出ていない」。以降、同じ語→語頭の順に条件を緩め、場内重複回避だけは最後まで残す。語頭を避ける語数は `LEVEL_FIRST_LIMIT[i] = clamp(RECENT_FIRST_KANA, 1, プールの語頭種類数 − FIRST_KANA_SLACK)`（L1 は 13、L2 以降 20）。語彙を減らすときはこの前提（L2 以降で語頭 22 種以上）を壊さない
 - **canvas/DOM の境界**: フィールドのみ canvas（座標はCSSピクセル、dprは `setTransform` で吸収）。キーパッド・HUD・オーバーレイ・フリックガイドは DOM。着地の判定線は canvas 下端そのもの（座標変換なし）
 - **1プレイ = 1レベル（固定）**。終了条件は「`destroyed >= required` でクリア」か「`TIME_LIMIT` の時間切れ」の2つだけ。ライフもスコアもない
 - **規定数** `requiredKills(level) = max(1, round(TIME_LIMIT / spawnIntervalFor(level) * CLEAR_RATIO))`。出現間隔を変えると規定数も変わる

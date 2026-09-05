@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-「十二 JŪNI」— フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。**1プレイ = 1レベル**で、60秒以内に規定数を撃破すればクリア。成績は**クリアタイム**（短いほど良い）。仕様の原典は [spec.md](spec.md)。実装は **index.html 一枚**で完結する。
+「FLICK IMPACT」（旧称: 十二 JŪNI。リポジトリ名・URL・localStorage キーは `juni` のまま）— フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。**1プレイ = 1レベル**で、60秒以内に規定数を撃破すればクリア。成績は**クリアタイム**（短いほど良い）。仕様の原典は [spec.md](spec.md)。実装は **index.html 一枚**で完結する。
 
 ## 絶対に守る制約
 
@@ -28,15 +28,16 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 
 ## アーキテクチャ（index.html 内の構成順）
 
-1. **CSS**: `:root` トークン（縦配分 `--pad-h`、開始レベル選択の寸法 `--lv-*`、パレット。基調は「ビビッドな宇宙」= 深い紫 `--bg-deep` × 星の黄 `--ember: #ffd93d`、副アクセントに `--cyan` / `--pink`。明朝体はタイトル・ランクのみ）。オーバーレイは `.modal` / `.panel` を共用
-2. **CONFIG / PALETTE / COST**: 全調整値。`FLICK_THRESHOLD`、`TIME_LIMIT`（60秒）、`CLEAR_RATIO`（規定数係数）、落下・出現カーブ、`RANKS`（クリアタイムのしきい値）、共有画像サイズ、音量など。`PALETTE.SKY` はレベル別の空の色、`PALETTE.SHARE_*` は共有画像の色
+1. **CSS**: `:root` トークン（縦配分 `--pad-h`、開始レベル選択の寸法 `--lv-*`、パレット。基調は「ビビッドな宇宙」= 深い紫 `--bg-deep` × 星の黄 `--ember: #ffd93d`、副アクセントに `--cyan` / `--pink`。明朝体はランク・見出しのみ。ロゴ関連は `--logo-*`）。オーバーレイは `.modal` / `.panel` を共用
+2. **CONFIG / PALETTE / COST**: 全調整値。`FLICK_THRESHOLD`、`TIME_LIMIT`（60秒）、`CLEAR_RATIO`（規定数係数）、落下・出現カーブ、`RANKS`（クリアタイムのしきい値）、共有画像サイズ、音量など。`PALETTE.SKY` はレベル別の空の色、`PALETTE.SHARE_*` は共有画像の色。続けて **ロゴ** `LOGO`（段・字間・影・グラデーションのCSS変数名）と `PIXEL_FONT`（高さ7の太字ドットフォント。ロゴに使う文字だけ）
 3. **入力データ**: `KEY_LAYOUT`（3×4キー）、`FLICK_MAP`（キー行→[中央,左,上,右,下]、nullは無反応）、`CYCLES`（小゛゜の変換循環 か→が、は→ば→ぱ、つ→っ→づ）
 4. **単語データ `WORDS`**: `"よみ|表記"` 形式のベタ書き（約600語、宇宙系2割。レベル別プールの順に並べてある）。起動時に `validateReading`（不正文字・`METEOR_MAX_LEN` 超え・語頭の ん/を/ー/小文字）と読みの重複を検査し、不正語は `console.warn` してスキップ。かなの網羅状況（未出現のかな・語頭に立たない清音）を `console.info` で報告する。各語に `first`（先頭のひらがな）と `firstToken`（先頭の入力トークン）を付与
 5. **語彙モジュール**: `toBase` / `rowOf` / `extraCost` / `analyze`（`actions`=実フリック回数が難易度基準）
 6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `LEVEL_POOLS`（起動時確定）。`speedScale(level)` / `spawnScale(level)` / `spawnIntervalFor(level)` / `requiredKills(level)` はレベルを引数に取る純関数。L6以降は速度と出現頻度が上がり続け、規定数も増える
-7. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす
-8. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
-9. **ゲーム状態・入力・UI配線**: `game`（`timeLeft`/`level`/`destroyed`/`required`/`combo`）、統計 `stats`、記録 `juni.records`、`showResult(rec, mode)`（clear / fail / view の3モード）、`finishGame(cleared)`、`startLevel(level)`、開始レベル選択、記録一覧、共有画像 `buildShareImage` / `shareResult`
+7. **ロゴ**: `logoRuns()` が `LOGO`/`PIXEL_FONT` から「FLICK IMPACT」2段のドット配置（横連続をまとめた矩形）を作る。`buildLogoSvg()` は HUD とタイトル画面に入れる SVG 文字列（影＋グラデーション。塗りは CSS 変数）、`drawLogo()` は共有画像用に canvas へ同じ配置を描く。favicon は `<head>` の data URI（16×16 ドット絵: 隕石にフリックの矢印が命中）
+8. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす
+9. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
+10. **ゲーム状態・入力・UI配線**: `game`（`timeLeft`/`level`/`destroyed`/`required`/`combo`）、統計 `stats`、記録 `juni.records`、`showResult(rec, mode)`（clear / fail / view の3モード）、`finishGame(cleared)`、`startLevel(level)`、開始レベル選択、記録一覧、共有画像 `buildShareImage` / `shareResult`
 
 ## 重要な設計判断（変更時に壊しやすい不変条件）
 
@@ -52,6 +53,7 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 - **開始レベル**: 解放上限 = `maxClearedLevel() + 1`（上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロール。`startLevel(level)` は `settings.startLevel` も更新する
 - **記録**: クリア時のみ更新。`juni.records[level]` はベストタイム更新（初クリア含む）のときだけ丸ごと置き換える。時間切れは記録に触れない。行別正答率の ↑↓ は同レベルの前ベストとの比較
 - **リザルトの遷移**: クリア「次のレベルへ」と時間切れ「もう一度」は `startLevel()` で即開始（タイトルを経由しない）。「タイトルへ」と一時停止「やり直す」は `goToTitle()`。記録閲覧（view）の「閉じる」はオーバーレイを閉じるだけ（下にタイトルが残っている）
+- **ロゴは1か所のデータから**: HUD・タイトル・共有画像のロゴはすべて `LOGO`/`PIXEL_FONT` から描く。文字を変えるときは `PIXEL_FONT` に字形を足し、`LOGO.LINES` を変える。HUD の幅は2段構成が前提（狭い端末は `--logo-hud-h-narrow` で縮める）
 - **共有画像**: `buildShareImage(rec)` は 1080×1080 の canvas を返す純関数。`shareResult()` は Web Share API（`navigator.canShare({files})`）→ 失敗/非対応なら `#share` に `<img>` とダウンロードリンクを出す
 - **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
 

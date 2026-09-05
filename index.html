@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>十二 JŪNI</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%231b1252'/><text x='8' y='12' font-size='10' text-anchor='middle' fill='%23ffd93d'>十</text></svg>">
+<title>FLICK IMPACT</title>
+<!-- アイコン: 16×16ドット絵(隕石にフリックの矢印が命中)。ロゴと同じレトロ調 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' rx='3' fill='%231b1252'/%3E%3Cpath fill='%23ff6fb5' d='M14 0h1v1h-1zM12 1h2v1h-2zM13 2h2v1h-2z'/%3E%3Cpath fill='%23ffd93d' d='M15 0h1v1h-1zM14 1h2v1h-2zM10 5h1v1h-1zM7 6h1v1h-1zM11 6h1v1h-1zM9 8h1v1h-1z'/%3E%3Cpath fill='%239a8ff0' d='M10 2h3v1h-3zM9 3h4v1h-4zM9 4h3v1h-3z'/%3E%3Cpath fill='%23ffffff' d='M2 3h1v1h-1zM12 8h1v1h-1zM12 13h1v1h-1z'/%3E%3Cpath fill='%235b4fc4' d='M13 3h1v1h-1zM8 4h1v1h-1zM12 4h2v1h-2zM8 5h2v1h-2zM11 5h3v1h-3zM8 6h3v1h-3zM12 6h2v1h-2zM9 7h4v1h-4z'/%3E%3Cpath fill='%23ffffff' d='M8 7h1v1h-1z'/%3E%3Cpath fill='%234ff0e6' d='M4 8h5v1h-5zM6 9h3v1h-3zM5 10h4v1h-4zM4 11h2v1h-2zM7 11h2v1h-2zM3 12h2v1h-2zM7 12h1v1h-1zM2 13h2v1h-2zM1 14h2v1h-2z'/%3E%3Cpath fill='%238f89d9' d='M11 11h1v1h-1z'/%3E%3C/svg%3E">
 <style>
 /* ============================================================
    調整用定数（レイアウト系）— CSSカスタムプロパティ
@@ -21,6 +22,9 @@
   --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
   --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
   --lv-scroll-gap: 12px;      /* スクロールバーが出るときにマスの右側へ空ける余白 */
+  --logo-hud-h: 28px;         /* HUDのロゴ(2段のドット文字)の高さ */
+  --logo-hud-h-narrow: 22px;  /* 狭い端末でのHUDロゴの高さ */
+  --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
 
   /* パレット: ビビッドな宇宙。深い紫の空に、黄・シアン・ピンクのネオンが差す */
   --bg-deep:    #1b1252;  /* 最深部の紫(体の背景) */
@@ -38,8 +42,10 @@
   --pink:       #ff6fb5;  /* 副アクセント: グラデーションの相方 */
   --danger:     #ff5c7a;  /* 警告(ラスト10秒・ミス・撃破数の減少) */
   --ok:         #7dffb0;  /* 改善(↑) */
+  --logo-shadow: #17104a; /* ドット文字ロゴの影(押し出し) */
+  --logo-glow:   rgba(255, 111, 181, 0.45); /* タイトル画面のロゴの光彩 */
 
-  --font-display: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --font-display: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; /* ランク・見出し用の明朝 */
   --font-ui: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
 }
 
@@ -79,23 +85,12 @@ html, body {
   align-items: center;
   gap: 8px;
 }
-#hud .wordmark {
-  font-family: var(--font-display);
-  font-size: 20px;
-  letter-spacing: 0.25em;
-  font-weight: 600;
-  white-space: nowrap; /* 狭い端末で「十二」が縦積みにならないように */
-}
-#hud .wordmark small {
-  font-family: var(--font-ui);
-  font-size: 9px;
-  letter-spacing: 0.35em;
-  color: var(--dim);
-  margin-left: 6px;
-  vertical-align: 2px;
-}
+/* ロゴ(SVGのドット文字)。中身は起動時に buildLogoSvg() が入れる */
+#hud .wordmark { display: block; height: var(--logo-hud-h); }
+.logo { display: block; height: 100%; width: auto; }
+.logo .logo-shadow { fill: var(--logo-shadow); }
 @media (max-width: 380px) {
-  #hud .wordmark small { display: none; } /* 狭い端末ではJŪNIを省く */
+  #hud .wordmark { height: var(--logo-hud-h-narrow); } /* 狭い端末ではロゴを小さく */
 }
 /* プレイ中のレベル(固定)を小さなピルで示す */
 .lv-pill {
@@ -578,23 +573,14 @@ i.down { color: var(--danger); }
 
 /* ---- スタート画面 ---- */
 #start .start-title {
-  font-family: var(--font-display);
-  font-size: 38px;
-  letter-spacing: 0.3em;
-  font-weight: 600;
-  background: linear-gradient(90deg, var(--ember), var(--pink), var(--cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
 }
-#start .start-title small {
-  display: block;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  letter-spacing: 0.5em;
-  color: var(--dim);
-  margin-top: 6px;
-  -webkit-text-fill-color: var(--dim);
+#start .start-title .logo {
+  width: var(--logo-title-w);
+  height: auto;
+  filter: drop-shadow(0 0 10px var(--logo-glow));
 }
 #start .start-copy {
   margin: 14px 0 2px;
@@ -649,7 +635,7 @@ i.down { color: var(--danger); }
 <div id="app">
   <header id="hud">
     <div class="hud-left">
-      <span class="wordmark">十二<small>JŪNI</small></span>
+      <span class="wordmark" id="hud-logo"></span>
       <span class="lv-pill" id="hud-level">LV 1</span>
     </div>
     <div class="hud-center">
@@ -699,7 +685,7 @@ i.down { color: var(--danger); }
 
 <div id="start" class="modal">
   <div class="panel">
-    <div class="start-title">十二<small>JŪNI</small></div>
+    <div class="start-title" id="start-title"></div>
     <p class="start-copy">フリック入力で地球を守れ</p>
     <div class="sec-title">あそびかた</div>
     <ul class="start-rules">
@@ -752,7 +738,7 @@ i.down { color: var(--danger); }
     <div class="go-title">画像を保存</div>
     <img id="share-img" alt="プレー結果の画像">
     <p class="share-hint">画像を長押しすると保存できます</p>
-    <a id="share-dl" class="primary" download="juni.png" href="#">ダウンロード</a>
+    <a id="share-dl" class="primary" download="flick-impact.png" href="#">ダウンロード</a>
     <button id="share-close" class="ghost">閉じる</button>
   </div>
 </div>
@@ -824,6 +810,8 @@ const CONFIG = {
   /* SNS共有画像 */
   SHARE_W: 1080,
   SHARE_H: 1080,
+  SHARE_LOGO_UNIT: 12, // 共有画像のロゴ1ドットの大きさ(px)
+  SHARE_LOGO_TOP: 64,  // 共有画像のロゴ上端(px)
   SITE_URL: "ken-mro.github.io/juni",
 };
 
@@ -861,6 +849,29 @@ const PALETTE = {
   SHARE_RANK: "#4ff0e6",
   SHARE_CELL: "rgba(255, 255, 255, 0.12)",
   SHARE_BAD: "#ff5c7a",
+  SHARE_LOGO: ["#ffd93d", "#ff6fb5", "#4ff0e6"], // 共有画像のロゴのグラデーション(左→右)
+  SHARE_LOGO_SHADOW: "#17104a",
+};
+
+/* ロゴ「FLICK IMPACT」のドット文字。HUD・タイトルは SVG、共有画像は canvas に同じデータから描く */
+const LOGO = {
+  LINES: ["FLICK", "IMPACT"],
+  GAP: 1,       // 文字間(ドット)
+  LINE_GAP: 2,  // 段間(ドット)
+  SHADOW: 1,    // 影のずれ(ドット)。DOMの影色は --logo-shadow、共有画像は PALETTE.SHARE_LOGO_SHADOW
+  GRADIENT: ["--ember", "--pink", "--cyan"], // DOMロゴの塗り(左→右)。CSS変数名で指定
+};
+/* 太字のドットフォント(高さ7)。幅は文字ごと(行文字列の長さ)。ロゴに使う文字だけ持つ */
+const PIXEL_FONT = {
+  A: ["011110", "110011", "110011", "111111", "110011", "110011", "110011"],
+  C: ["011110", "110011", "110000", "110000", "110000", "110011", "011110"],
+  F: ["111111", "110000", "110000", "111110", "110000", "110000", "110000"],
+  I: ["111111", "001100", "001100", "001100", "001100", "001100", "111111"],
+  K: ["110011", "110110", "111100", "111000", "111100", "110110", "110011"],
+  L: ["110000", "110000", "110000", "110000", "110000", "110000", "111111"],
+  M: ["1100011", "1110111", "1111111", "1111111", "1101011", "1100011", "1100011"],
+  P: ["111110", "110011", "110011", "111110", "110000", "110000", "110000"],
+  T: ["111111", "001100", "001100", "001100", "001100", "001100", "001100"],
 };
 
 /* 文字種ごとの追加アクション数(タップ回数)。難易度計算の基準 */
@@ -1305,6 +1316,62 @@ function skyFor(level) {
   return SKY_RGB[Math.min(level - 1, SKY_RGB.length - 1)];
 }
 const rgbStr = (c) => `rgb(${c.map(Math.round).join(",")})`;
+
+/* ============================================================
+   ロゴ: LOGO / PIXEL_FONT から「FLICK IMPACT」のドット配置を作る
+   ============================================================ */
+const GLYPH_H = 7;
+/* 2段を中央揃えで並べ、横方向に連続するドットをまとめた矩形 [x, y, 幅](単位: ドット)を返す */
+function logoRuns() {
+  const glyphW = (ch) => PIXEL_FONT[ch][0].length;
+  const widths = LOGO.LINES.map((line) => [...line].reduce((a, ch) => a + glyphW(ch) + LOGO.GAP, -LOGO.GAP));
+  const w = Math.max(...widths);
+  const h = LOGO.LINES.length * (GLYPH_H + LOGO.LINE_GAP) - LOGO.LINE_GAP;
+  const runs = [];
+  LOGO.LINES.forEach((line, li) => {
+    const y0 = li * (GLYPH_H + LOGO.LINE_GAP);
+    const rows = Array.from({ length: GLYPH_H }, () => []);
+    let x0 = Math.floor((w - widths[li]) / 2);
+    for (const ch of line) {
+      PIXEL_FONT[ch].forEach((bits, y) => [...bits].forEach((b, x) => { if (b === "1") rows[y].push(x0 + x); }));
+      x0 += glyphW(ch) + LOGO.GAP;
+    }
+    rows.forEach((xs, y) => {
+      for (let i = 0; i < xs.length; i++) {
+        let len = 1;
+        while (i + 1 < xs.length && xs[i + 1] === xs[i] + len) len++;
+        runs.push([xs[i], y0 + y, len]);
+        i += len - 1;
+      }
+    });
+  });
+  return { w, h, runs };
+}
+let logoSeq = 0;
+/* DOM 用: 影付き・グラデーションの SVG 文字列。塗りは CSS 変数(LOGO.GRADIENT / --logo-shadow) */
+function buildLogoSvg() {
+  const { w, h, runs } = logoRuns();
+  const d = runs.map(([x, y, len]) => `M${x} ${y}h${len}v1h-${len}z`).join("");
+  const id = `logo-grad-${++logoSeq}`;
+  const stops = LOGO.GRADIENT.map((v, i) => `<stop offset="${i / (LOGO.GRADIENT.length - 1)}" style="stop-color:var(${v})"/>`).join("");
+  const s = LOGO.SHADOW;
+  return `<svg class="logo" viewBox="0 0 ${w + s} ${h + s}" role="img" aria-label="${LOGO.LINES.join(" ")}" shape-rendering="crispEdges">` +
+    `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${w}" y2="0">${stops}</linearGradient></defs>` +
+    `<path class="logo-shadow" transform="translate(${s} ${s})" d="${d}"/><path fill="url(#${id})" d="${d}"/></svg>`;
+}
+/* canvas 用: 中心 cx・上端 top に 1ドット unit px で描く。塗りは PALETTE.SHARE_LOGO */
+function drawLogo(g, cx, top, unit) {
+  const { w, runs } = logoRuns();
+  const x0 = cx - (w * unit) / 2;
+  const s = LOGO.SHADOW * unit;
+  const paint = (dx, dy) => { for (const [x, y, len] of runs) g.fillRect(x0 + x * unit + dx, top + y * unit + dy, len * unit, unit); };
+  g.fillStyle = PALETTE.SHARE_LOGO_SHADOW;
+  paint(s, s);
+  const grad = g.createLinearGradient(x0, 0, x0 + w * unit, 0);
+  PALETTE.SHARE_LOGO.forEach((c, i) => grad.addColorStop(i / (PALETTE.SHARE_LOGO.length - 1), c));
+  g.fillStyle = grad;
+  paint(0, 0);
+}
 
 /* ============================================================
    隕石: 生成・落下・ターゲティング・破壊
@@ -2163,6 +2230,10 @@ document.getElementById("go-close").addEventListener("click", () => {
   else overlayEl.classList.add("hidden"); // 記録の閲覧: タイトルはその下に残っている
 });
 
+/* ---- ロゴ: HUD とタイトル画面に同じ SVG を入れる ---- */
+document.getElementById("hud-logo").innerHTML = buildLogoSvg();
+document.getElementById("start-title").innerHTML = buildLogoSvg();
+
 /* ---- スタート画面: 開始レベル選択 + ボタンで開始(この操作でオーディオも起動) ---- */
 const startEl = document.getElementById("start");
 const pickerEl = document.getElementById("level-picker");
@@ -2287,13 +2358,8 @@ function buildShareImage(rec) {
     });
   };
 
-  /* タイトル */
-  g.fillStyle = PALETTE.SHARE_TEXT;
-  g.font = `600 118px ${FONT_D}`;
-  spaced("十二", W / 2, 150, 40);
-  g.fillStyle = PALETTE.SHARE_DIM;
-  g.font = `600 26px ${FONT_U}`;
-  spaced("JŪNI", W / 2, 232, 14);
+  /* タイトル(ドット文字ロゴ) */
+  drawLogo(g, W / 2, CONFIG.SHARE_LOGO_TOP, CONFIG.SHARE_LOGO_UNIT);
 
   /* 見出し: LEVEL n CLEAR */
   g.fillStyle = PALETTE.SHARE_ACCENT;
@@ -2360,8 +2426,8 @@ async function shareResult() {
   const canvas = buildShareImage(rec);
   const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
   if (!blob) return;
-  const name = `juni-level${rec.level}.png`;
-  const text = `十二 JŪNI — LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
+  const name = `flick-impact-level${rec.level}.png`;
+  const text = `FLICK IMPACT — LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
   if (typeof File === "function" && navigator.canShare) {
     const file = new File([blob], name, { type: "image/png" });
     if (navigator.canShare({ files: [file] })) {

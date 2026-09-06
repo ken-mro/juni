@@ -30,4 +30,4 @@ CANONICAL_HOST = "flick-impact.com"
 # プレイデータの保存先。`npx wrangler kv namespace create PLAYDATA` で作った id を貼る
 [[kv_namespaces]]
 binding = "PLAYDATA"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "403ef260d6a54ad28d9b6ba4c331568f"

@@ -498,6 +498,30 @@ i.down { color: var(--danger); }
   letter-spacing: 0.1em;
 }
 
+/* 引っ越しの案内(旧配信先で出す)と、引き継ぎ完了の知らせ(新ドメインで出す) */
+.migrate {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--ember);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: center;
+}
+.migrate.hidden { display: none; }
+.migrate .primary { margin-top: 0; }
+.migrate .primary.hidden { display: none; }
+.migrate-lead { line-height: 1.5; }
+.migrate-lead b { color: var(--ember); }
+.migrate-lead:not(:empty) { margin-bottom: 8px; }
+.migrate-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
 /* ---- 記録一覧 ---- */
 .records-list {
   display: flex;
@@ -739,6 +763,12 @@ i.down { color: var(--danger); }
     <button id="btn-start" class="primary">スタート</button>
     <button id="btn-records" class="linklike">🏆&#xFE0E; 記録を見る</button>
     <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
+    <!-- 引っ越し(旧配信先でだけ出す) / 引き継ぎ完了の知らせ。中身は Migrate が入れる -->
+    <div id="migrate" class="migrate hidden">
+      <p id="migrate-lead" class="migrate-lead"></p>
+      <button id="btn-migrate" class="primary hidden"></button>
+      <span id="migrate-note" class="migrate-note"></span>
+    </div>
     <!-- クラウド同期(任意): Googleでログインすると記録・設定を保存し、別の端末でも引き継げる。
          バックエンド(/api)が無い配信先(GitHub Pages など)では非表示のまま -->
     <div id="cloud" class="cloud hidden">
@@ -2342,7 +2372,123 @@ const Cloud = (() => {
   loginEl.addEventListener("click", login);
   document.getElementById("cloud-logout").addEventListener("click", logout);
 
-  return { init, schedulePush, push, isLoggedIn: () => !!user };
+  /* 外から渡された記録・設定(引っ越しなど)を手元と統合する。規則はクラウド同期と同じ。
+     統合後は markLocalChange() で「今が最新」にする。次のログイン時にこの内容が上がる */
+  function absorb(data) {
+    apply(mergeData(snapshot(), data));
+    markLocalChange();
+  }
+
+  return { init, schedulePush, push, absorb, isLoggedIn: () => !!user };
+})();
+
+/* ============================================================
+   引っ越し(旧配信先 ken-mro.github.io → flick-impact.com)
+
+   記録と設定は localStorage にあり、localStorage はオリジンごとに完全に別物なので、
+   旧配信先で遊んでいた人の記録は、放っておくと新ドメインには 1 つも引き継がれない。
+   クラウド同期も救いにならない(旧配信先にはバックエンドが無く、誰もログインしていない)。
+
+   そこで旧配信先では「引っ越す」ボタンを出し、記録を URL の # に載せて新ドメインへ渡す。
+   # はサーバーへ送信されないので、記録が経路上に残らない。受け取り側は Cloud.absorb() で
+   手元と統合する(規則はクラウド同期と同じ = レベルごとにタイムが短いほう)。
+
+   旧と新には同じ index.html が配られる。どちらの役をやるかは配信先のホスト名で決まる
+   ============================================================ */
+const Migrate = (() => {
+  const NEW_URL = "https://flick-impact.com/";
+  const PARAM = "migrate";
+  /* # はサーバーに送られないので URL 長の実質的な上限はブラウザ側だけ(かなり大きい)。
+     それでも短いに越したことはないので、この長さを超えたら行別・方向別の詳細を捨てる。
+     現実的なレベル数(数十)では超えないので、これは念のための保険 */
+  const MAX_HASH = 30000;
+  const CHUNK = 0x2000;         // btoa へ一度に渡す量(引数を広げすぎるとスタックが溢れる)
+
+  const rootEl = document.getElementById("migrate");
+  const leadEl = document.getElementById("migrate-lead");
+  const noteEl = document.getElementById("migrate-note");
+  const btnEl = document.getElementById("btn-migrate");
+
+  /* URL に載せられる形(base64url)。記録には日本語(行の名前)が入るので UTF-8 を経由する */
+  function encode(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function decode(text) {
+    const bin = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  }
+
+  /* 送る中身。長くなりすぎるときは行別・方向別の詳細を落として、タイムだけでも渡す */
+  function pack() {
+    const data = { records: loadRecords(), settings: { ...settings }, updatedAt: localUpdatedAt() };
+    const full = encode(JSON.stringify(data));
+    if (full.length <= MAX_HASH) return full;
+    const slim = Object.fromEntries(Object.entries(data.records).map(([lv, r]) => [lv, {
+      level: r.level, time: r.time, maxCombo: r.maxCombo, destroyed: r.destroyed, required: r.required,
+    }]));
+    return encode(JSON.stringify({ ...data, records: slim }));
+  }
+
+  /* 受け取ったものの検査。URL は誰でも作れるので、形の合わないものは黙って捨てる */
+  function validate(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const records = {};
+    for (const [lv, rec] of Object.entries(raw.records ?? {})) {
+      if (!/^[0-9]{1,4}$/.test(lv)) continue;
+      if (!rec || typeof rec !== "object" || Array.isArray(rec)) continue;
+      if (!Number.isFinite(rec.time) || rec.time <= 0) continue;
+      records[lv] = rec;
+    }
+    const incoming = {};
+    for (const [k, def] of Object.entries(settings)) {          // 既知のキーだけ、型が合うものだけ
+      const v = raw.settings?.[k];
+      if (typeof v === typeof def) incoming[k] = v;
+    }
+    if (!Object.keys(records).length && !Object.keys(incoming).length) return null;
+    return { records, settings: incoming, updatedAt: Number.isFinite(raw.updatedAt) ? raw.updatedAt : 0 };
+  }
+
+  function show(lead, note, button = "") {
+    leadEl.innerHTML = lead;
+    noteEl.textContent = note;
+    btnEl.textContent = button;
+    btnEl.classList.toggle("hidden", !button);
+    rootEl.classList.remove("hidden");
+  }
+
+  /* 受け取り側。#migrate=... が付いていたら統合して、URL からは消す */
+  function receive() {
+    const m = location.hash.match(new RegExp("[#&]" + PARAM + "=([A-Za-z0-9_-]+)"));
+    if (!m) return false;
+    history.replaceState(null, "", location.pathname + location.search); // 記録入りURLを履歴に残さない
+    let data = null;
+    try { data = validate(JSON.parse(decode(m[1]))); } catch {}
+    if (!data) {
+      show("記録を読み取れませんでした", "引っ越し元の画面から、もう一度お試しください");
+      return true;
+    }
+    Cloud.absorb(data);
+    const n = Object.keys(data.records).length;
+    show(`記録を引き継ぎました(${n}レベル)`,
+         "Googleでログインしておくと、次からは端末をまたいで同期されます");
+    return true;
+  }
+
+  /* 送り側。旧配信先(GitHub Pages)でだけ出す。localhost や新ドメインでは出さない */
+  function offer() {
+    if (!location.hostname.endsWith(".github.io")) return;
+    const n = Object.keys(loadRecords()).length;
+    show("このゲームは <b>flick-impact.com</b> へ引っ越しました。",
+         n ? "記録は URL に載せて渡します(サーバーには送られません)。この画面の記録も残ります"
+           : "まだ記録はありません。そのまま新しい URL でどうぞ",
+         n ? "記録を持って引っ越す" : "新しいURLへ");
+    btnEl.addEventListener("click", () => { location.href = n ? `${NEW_URL}#${PARAM}=${pack()}` : NEW_URL; });
+  }
+
+  return { init: () => { if (!receive()) offer(); } };
 })();
 
 /* 正答率(%)。試行がなければ null */
@@ -2574,6 +2720,9 @@ document.getElementById("btn-start").addEventListener("click", () => {
   startLevel(settings.startLevel);
   startEl.classList.add("hidden");
 });
+
+/* 引っ越しの受け取り/案内。クラウド同期より先(引き継いだ記録も同期の対象に乗せる) */
+Migrate.init();
 
 /* クラウド同期の開始。画面を隠す/閉じる直前は待たずに送り、戻ってきたら失敗分を再送する */
 Cloud.init();

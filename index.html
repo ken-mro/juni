@@ -50,6 +50,7 @@
   --ok:         #7dffb0;  /* 改善(↑) */
   --logo-shadow: #17104a; /* ドット文字(ロゴ・見出し)の影(押し出し) */
   --logo-glow:   rgba(255, 111, 181, 0.45); /* タイトル画面のロゴの光彩 */
+  --secret-glow: rgba(79, 240, 230, 0.55);  /* 隠しステージへの「?」ボタンの明滅の光彩 */
 
   --font-display: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; /* ランク・見出し用の明朝 */
   --font-ui: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
@@ -612,6 +613,10 @@ i.down { color: var(--danger); }
 .rec .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ember); }
 .rec .rec-rank { color: var(--cyan); }
 .rec .rec-rank .pixel { height: var(--pixel-rec-rank-h); }
+/* 隠しステージのベスト友好度(押せない) */
+.rec.rec-secret { cursor: default; }
+.rec.rec-secret .rec-lv { color: var(--cyan); letter-spacing: 0.2em; }
+.rec.rec-secret .rec-time { color: var(--cyan); }
 .records-empty { margin: 14px 0 4px; font-size: 13px; color: var(--dim); }
 .records-empty.hidden { display: none; }
 
@@ -658,6 +663,19 @@ i.down { color: var(--danger); }
   cursor: pointer;
 }
 .ghost.hidden { display: none; }
+/* 隠しステージへの入口「?」: 5の倍数レベルのクリア時だけ出る。ゆっくり明滅して気づかせる */
+.secret-btn {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+  animation: secret-glow 2.4s ease-in-out infinite;
+}
+@keyframes secret-glow {
+  0%, 100% { box-shadow: 0 0 0 transparent; opacity: 0.7; }
+  50% { box-shadow: 0 0 14px var(--secret-glow); opacity: 1; }
+}
 /* 枠と塗りのある副ボタン(記録・設定・ログイン・ログアウト)。押せることが一目で分かるようにする */
 .outline-btn {
   border: 1px solid var(--key-edge);
@@ -777,7 +795,7 @@ i.down { color: var(--danger); }
     </div>
     <div class="hud-right">
       <div class="stat">
-        <span class="label">撃破</span>
+        <span class="label" id="hud-kills-label">撃破</span>
         <span class="value" id="hud-kills">0 / 0</span>
         <div class="gauge"><i id="hud-progress"></i></div>
       </div>
@@ -803,8 +821,8 @@ i.down { color: var(--danger); }
       <div class="lv-big" id="go-main">0.00<small>秒</small></div>
       <div class="rank" id="go-rank-wrap"><span id="go-rank-label"></span><span id="go-rank"></span></div>
     </div>
-    <div class="row"><span>レベル</span><b id="go-level">1</b></div>
-    <div class="row" id="go-best-row"><span>ベストタイム</span><b id="go-best">—</b></div>
+    <div class="row" id="go-level-row"><span>レベル</span><b id="go-level">1</b></div>
+    <div class="row" id="go-best-row"><span id="go-best-label">ベストタイム</span><b id="go-best">—</b></div>
     <div class="row"><span>最大コンボ</span><b id="go-combo">0</b></div>
     <div class="sec-title">行別 正答率（↑↓ ベスト比）</div>
     <div id="go-rows" class="rowgrid"></div>
@@ -813,6 +831,8 @@ i.down { color: var(--danger); }
     <button id="go-next" class="primary">次のレベルへ</button>
     <button id="go-retry" class="primary">もう一度</button>
     <button id="go-share" class="ghost">画像を共有・保存</button>
+    <!-- 隠しステージへの入口。SECRET_EVERY の倍数のレベルをクリアしたときだけ出る -->
+    <button id="go-secret" class="ghost secret-btn hidden" aria-label="？">?</button>
     <button id="go-close" class="ghost">タイトルへ</button>
   </div>
 </div>
@@ -986,6 +1006,20 @@ const CONFIG = {
   /* ランク: クリアタイム(秒)がしきい値以下なら、その文字。上から順に判定 */
   RANKS: [[30, "S"], [40, "A"], [50, "B"], [60, "C"]],
 
+  /* 隠しステージ「ファーストコンタクト」: SECRET_EVERY の倍数のレベルをクリアしたリザルトに「?」を出す。
+     UFO の宇宙人が降らせる「ふきだし」を打ち返して友好度(撃破数 / 規定数)を上げる。着地の減点は無い */
+  SECRET_EVERY: 5,
+  SECRET_SPEED: 0.75,       // ふきだしの落下速度(そのレベルの隕石に対する係数)
+  SECRET_BPM: 108,          // 隠しステージの BGM テンポ(レベル・ラストスパートで変えない)
+  SECRET_FACE_STEPS: [34, 67, 100], // 宇宙人の表情が変わる友好度(%)。未満は無表情 → にっこり → 大喜び → 100% で目が星
+  UFO_Y: 44,                // UFO の中心の高さ(px。フィールド上端から)
+  UFO_W: 92,                // UFO の円盤の幅(px)
+  UFO_SWAY: 18,             // UFO の横揺れの振幅(px)
+  UFO_SWAY_SPEED: 0.6,      // UFO の横揺れの速さ(rad/s)
+  BUBBLE_POP: 0.2,          // ふきだしが出現してから等倍になるまでの秒数
+  HEART_SPEED: 260,         // 打ち返したハートが UFO へ向かう速さ(px/s)
+  HEART_PARTICLES: 12,      // ハートが UFO に届いたときの火花の数
+
   /* SNS共有画像 */
   SHARE_W: 1080,
   SHARE_H: 1080,
@@ -1046,6 +1080,29 @@ const PALETTE = {
   FLOAT_COMBO: "#4ff0e6",
   FLOAT_SPURT: "#ff5c7a",
   FLOAT_PENALTY: "#ff5c7a",
+  /* 隠しステージ: 空(深い青緑)・UFO と宇宙人・ふきだし・ハート */
+  SKY_SECRET: ["#0f2a3e", "#1f7a8c"],
+  UFO_BODY: "#d6d5ff",
+  UFO_BODY_DARK: "#6a5fd6",
+  UFO_RIM: "rgba(255, 255, 255, 0.6)",
+  UFO_DOME: "rgba(79, 240, 230, 0.3)",
+  UFO_DOME_EDGE: "rgba(230, 255, 253, 0.8)",
+  UFO_LIGHTS: ["#ffd93d", "#ff6fb5", "#4ff0e6"],
+  ALIEN_SKIN: "#7dffb0",
+  ALIEN_EYE: "#1b1252",
+  ALIEN_EYE_SHINE: "#ffffff",
+  ALIEN_STAR: "#ffd93d",
+  ALIEN_CHEEK: "rgba(255, 111, 181, 0.55)",
+  BUBBLE_BODY: "#f4f2ff",
+  BUBBLE_EDGE: "#bdb8f2",
+  BUBBLE_BODY_LOCK: "#e2fffc",
+  BUBBLE_EDGE_LOCK: "#4ff0e6",
+  BUBBLE_GLOW: "rgba(255, 255, 255, 0.35)",
+  BUBBLE_CHAR_NEXT: "#d4348a",   // ふきだしの中の次に打つ文字(白地なので濃い色)
+  BUBBLE_CHAR_REST: "#6a5fd6",
+  BUBBLE_CHAR_OUTLINE: "rgba(255, 255, 255, 0.9)",
+  FLOAT_HEART: "#ff6fb5",
+  FLOAT_UNHEARD: "#d6d5ff",
   /* 共有画像 */
   SHARE_TEXT: "#ffffff",
   SHARE_DIM: "#d6d5ff",
@@ -1071,6 +1128,7 @@ const PIXEL_HEADINGS = {
   FAIL: { text: "TIME UP", fill: ["--dim"] },
   READY: { text: "READY", fill: ["--cyan", "--ember"] },
   GO: { text: "GO!", fill: ["--ember", "--pink"] },
+  SECRET: { text: "THANK YOU", fill: ["--cyan", "--pink"] }, // 隠しステージのリザルト
   RANK_LABEL: "RANK",
 };
 /* 太字のドットフォント(高さ7・2ドット幅の線)。幅は文字ごと(行文字列の長さ)。英大文字・数字・記号 */
@@ -1568,8 +1626,10 @@ function hexToRgb(hex) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 const SKY_RGB = PALETTE.SKY.map((pair) => pair.map(hexToRgb));
+const SKY_SECRET_RGB = PALETTE.SKY_SECRET.map(hexToRgb);
 let sky = SKY_RGB[0].map((c) => [...c]); // 現在の [上, 下] RGB
 function skyFor(level) {
+  if (game.secret) return SKY_SECRET_RGB;
   return SKY_RGB[Math.min(level - 1, SKY_RGB.length - 1)];
 }
 const rgbStr = (c) => `rgb(${c.map(Math.round).join(",")})`;
@@ -1685,15 +1745,18 @@ function spawnMeteor() {
   const ry = CONFIG.METEOR_RY + word.len * 1.5;
   const margin = rx + 8;
   const speedJitter = 1 + (Math.random() * 2 - 1) * CONFIG.FALL_SPEED_VAR;
+  /* 隠しステージ: ふきだしは UFO の下から、隕石よりゆっくり降りる */
+  const secret = game.secret;
   meteors.push({
     word, chars,
     charIdx: 0,   // 何文字目まで消したか
     charProg: 0,  // 現在の文字に入力済みのトークン数
+    t: 0,         // 出現からの経過秒(ふきだしのポップインに使う)
     x: margin + Math.random() * Math.max(fieldW - margin * 2, 1),
-    y: ry + 6, // 画面上部に全体が見える位置から落ち始める
+    y: secret ? CONFIG.UFO_Y + CONFIG.UFO_W * 0.13 + ry + 12 : ry + 6, // 画面上部に全体が見える位置から落ち始める
 
     rx, ry,
-    speed: CONFIG.FALL_SPEED * speedScale(game.level) * speedJitter,
+    speed: CONFIG.FALL_SPEED * speedScale(game.level) * speedJitter * (secret ? CONFIG.SECRET_SPEED : 1),
     rot: Math.random() * Math.PI * 2,
     rotSpeed: (Math.random() * 2 - 1) * 0.3,
     /* 岩の輪郭(半径ジッタ)と、ヒビ・クレーターの乱数は生成時に固定 */
@@ -1855,6 +1918,8 @@ const SFX = (() => {
       tone(110, 0.3, { vol: 0.45, slide: -60 });
       melody([79, 84], 0.06, 0.12, { type: "square", vol: 0.1, delay: 0.02 });
     },
+    /* 隠しステージ: ことばが通じた(1語打ち返し)。爆発の代わりの柔らかい上昇アルペジオ */
+    chime() { melody([76, 80, 83, 88], 0.05, 0.28, { type: "triangle", vol: 0.16 }); },
     /* ミス入力: 短く低いブザー */
     miss() { tone(180, 0.14, { type: "square", vol: 0.18, slide: -60 }); },
     /* 隕石着地(撃破数−1): 落ちる2音。警報にはしない */
@@ -1947,6 +2012,7 @@ const BGM = (() => {
   /* レベル追従: 高レベルほど速く・リズムが密に。ラストスパートでさらに加速。
      値は小節の境界でしか反映されないため急変しない */
   function mood() {
+    if (game.secret) return { spb: 60 / CONFIG.SECRET_BPM, drive: 0 }; // 隠しステージは落ち着いた一定テンポ
     const lv = Math.min(game.level, CONFIG.BGM_LEVEL_CAP) - 1;
     const bpm = CONFIG.BGM_BPM + lv * CONFIG.BGM_BPM_PER_LEVEL +
       (game.spurt ? CONFIG.BGM_SPURT_BPM_ADD : 0);
@@ -2222,13 +2288,18 @@ const game = {
   over: false,
   cleared: false,
   paused: false,  // 一時停止・設定画面を開いている間
+  secret: false,  // 隠しステージ(ファーストコンタクト)か。level はクリアしたレベルのまま
 };
-let floaters = []; // フィールド上に浮かぶ文字(撃破した語・COMBO・ラスト10秒・-1)
+let floaters = []; // フィールド上に浮かぶ文字(撃破した語・COMBO・ラスト10秒・-1・隠しステージのハート)
+
+/* 隠しステージの友好度(%)。撃破数 / 規定数を 100 で頭打ち */
+const secretPct = () => Math.min(100, Math.round((game.destroyed / game.required) * 100));
 
 const hudTimeEl = document.getElementById("hud-time");
 const hudComboEl = document.getElementById("hud-combo");
 const hudLevelEl = document.getElementById("hud-level");
 const hudKillsEl = document.getElementById("hud-kills");
+const hudKillsLabelEl = document.getElementById("hud-kills-label");
 const hudProgressEl = document.getElementById("hud-progress");
 const overlayEl = document.getElementById("overlay");
 
@@ -2240,8 +2311,9 @@ function bump(el, scale = 1.35) {
 
 function updateHud() {
   hudComboEl.textContent = game.combo;
-  hudLevelEl.textContent = `LV ${game.level}`;
-  hudKillsEl.textContent = `${game.destroyed} / ${game.required}`;
+  hudLevelEl.textContent = game.secret ? "？" : `LV ${game.level}`;
+  hudKillsLabelEl.textContent = game.secret ? "友好度" : "撃破";
+  hudKillsEl.textContent = game.secret ? `${secretPct()}%` : `${game.destroyed} / ${game.required}`;
   hudProgressEl.style.width = `${Math.min(game.destroyed / game.required, 1) * 100}%`;
 }
 
@@ -2298,14 +2370,20 @@ function handleGameInput(token) {
     spawnParticles(target.x, target.y, CONFIG.HIT_PARTICLES);
   }
   if (target.charIdx >= target.word.len) {
-    fireBeam(target, true);
+    /* 隠しステージは撃たない: ふきだしがハートになって UFO へ返る */
+    if (game.secret) {
+      spawnHeart(target);
+      SFX.chime();
+    } else {
+      fireBeam(target, true);
+      SFX.boom();
+    }
     spawnParticles(target.x, target.y, CONFIG.BOOM_PARTICLES);
     meteors = meteors.filter((m) => m !== target);
     lockedTarget = null;
-    SFX.boom();
     onDestroy(target);
   } else {
-    fireBeam(target, false);
+    if (!game.secret) fireBeam(target, false);
     if (target.charProg === 0) SFX.crack();
   }
   updateHud();
@@ -2327,11 +2405,19 @@ function onDestroy(meteor) {
     t: 0, life: 0.9, kind: "word",
   });
   bump(hudKillsEl, 1.2);
-  if (game.destroyed >= game.required) finishGame(true);
+  if (game.destroyed >= game.required) game.secret ? finishSecret() : finishGame(true);
 }
 
-/* 着地: 撃破数が1戻る(0未満にはならない)。コンボも切れて画面が揺れる */
+/* 着地: 撃破数が1戻る(0未満にはならない)。コンボも切れて画面が揺れる。
+   隠しステージは「聞き取れなかった」だけで、減点も揺れも無い */
 function onLanded(meteor) {
+  if (game.secret) {
+    game.combo = 0;
+    floaters.push({ x: meteor.x, y: fieldH - 40, text: "…？", t: 0, life: 1.0, kind: "unheard" });
+    SFX.miss();
+    updateHud();
+    return;
+  }
   dangerFlash = 1;
   shake = CONFIG.SHAKE_AMP;
   game.combo = 0;
@@ -2426,9 +2512,13 @@ const Cloud = (() => {
       if (!records[lv] || rec.time < records[lv].time) records[lv] = rec;
     }
     const cloudNewer = (cloud.updatedAt ?? 0) > local.updatedAt;
+    const merged = cloudNewer ? { ...local.settings, ...cloud.settings } : { ...local.settings };
+    /* 隠しステージのベスト友好度は記録と同じ扱い: 新しいほうではなく高いほう */
+    const bests = [local.settings.secretBest, cloud.settings?.secretBest].filter(Number.isFinite);
+    if (bests.length) merged.secretBest = Math.max(...bests);
     return {
       records,
-      settings: cloudNewer ? { ...local.settings, ...cloud.settings } : local.settings,
+      settings: merged,
       updatedAt: Math.max(local.updatedAt, cloud.updatedAt ?? 0),
     };
   }
@@ -2700,16 +2790,19 @@ function renderResultStats(st, prev) {
 let currentResult = null; // 共有画像の対象
 function showResult(rec, mode, { prev = null, isNewBest = false, best = null } = {}) {
   currentResult = rec;
+  const secret = mode === "secret";
   const cleared = mode !== "fail";
-  const head = cleared ? PIXEL_HEADINGS.CLEAR : PIXEL_HEADINGS.FAIL;
+  const head = secret ? PIXEL_HEADINGS.SECRET : cleared ? PIXEL_HEADINGS.CLEAR : PIXEL_HEADINGS.FAIL;
   document.getElementById("go-title").innerHTML = buildPixelSvg([head.text], head.fill);
   document.getElementById("go-hero").classList.toggle("fail", !cleared);
-  document.getElementById("go-hero-label").textContent = cleared ? "クリアタイム" : "撃破 / 規定";
-  document.getElementById("go-main").innerHTML = cleared
-    ? `${rec.time.toFixed(2)}<small>秒</small>`
-    : `${rec.destroyed}<small>/ ${rec.required}</small>`;
-  document.getElementById("go-rank-wrap").classList.toggle("hidden", !cleared);
-  if (cleared) {
+  document.getElementById("go-hero-label").textContent = secret ? "友好度" : cleared ? "クリアタイム" : "撃破 / 規定";
+  document.getElementById("go-main").innerHTML = secret
+    ? `${rec.pct}<small>%</small>`
+    : cleared
+      ? `${rec.time.toFixed(2)}<small>秒</small>`
+      : `${rec.destroyed}<small>/ ${rec.required}</small>`;
+  document.getElementById("go-rank-wrap").classList.toggle("hidden", !cleared || secret);
+  if (cleared && !secret) {
     document.getElementById("go-rank-label").innerHTML = buildPixelSvg([PIXEL_HEADINGS.RANK_LABEL], "currentColor", "pixel rank-label");
     document.getElementById("go-rank").innerHTML = buildPixelSvg([rankFor(rec.time)], "currentColor", "pixel rank-letter");
   }
@@ -2718,14 +2811,19 @@ function showResult(rec, mode, { prev = null, isNewBest = false, best = null } =
   newBestEl.classList.add("hidden");
   void newBestEl.offsetWidth;
   newBestEl.classList.toggle("hidden", !isNewBest);
+  document.getElementById("go-level-row").classList.toggle("hidden", secret);
   document.getElementById("go-level").textContent = rec.level;
   document.getElementById("go-best-row").classList.toggle("hidden", !best);
-  if (best) document.getElementById("go-best").textContent = fmtTime(best.time);
+  document.getElementById("go-best-label").textContent = secret ? "ベスト友好度" : "ベストタイム";
+  if (best) document.getElementById("go-best").textContent = secret ? `${best.pct}%` : fmtTime(best.time);
   document.getElementById("go-combo").textContent = rec.maxCombo;
   renderResultStats(rec, prev);
   document.getElementById("go-next").classList.toggle("hidden", mode !== "clear");
   document.getElementById("go-retry").classList.toggle("hidden", mode !== "fail");
-  document.getElementById("go-share").classList.toggle("hidden", !cleared);
+  document.getElementById("go-share").classList.toggle("hidden", !cleared || secret);
+  /* 隠しステージへの「?」: SECRET_EVERY の倍数のレベルをいまクリアしたときだけ */
+  document.getElementById("go-secret").classList.toggle("hidden",
+    !(mode === "clear" && rec.level % CONFIG.SECRET_EVERY === 0));
   document.getElementById("go-close").textContent = mode === "view" ? "閉じる" : "タイトルへ";
   overlayEl.classList.remove("hidden");
 }
@@ -2764,6 +2862,35 @@ function finishGame(cleared) {
   showResult(rec, "clear", { prev, isNewBest, best: isNewBest ? rec : prev });
 }
 
+/* 隠しステージの終了: 友好度 100% か時間切れ。失敗は無く、ベスト友好度だけ settings に残す
+   (記録一覧の「？？？」行とクラウド同期はこの値を使う) */
+function finishSecret() {
+  game.over = true;
+  game.cleared = true;
+  hudTimeEl.classList.remove("warn");
+  BGM.stop();
+  const pct = secretPct();
+  const prevBest = Number.isFinite(settings.secretBest) ? settings.secretBest : null;
+  const rec = {
+    level: game.level, pct,
+    maxCombo: game.maxCombo,
+    destroyed: game.destroyed,
+    required: game.required,
+    rows: stats.rows,
+    dirs: stats.dirs,
+    t: Date.now(),
+  };
+  SFX.clear();
+  const isNewBest = prevBest === null || pct > prevBest;
+  if (isNewBest) {
+    settings.secretBest = pct;
+    saveSettings();
+    spawnConfetti(CONFIG.CONFETTI);
+    SFX.newRecord();
+  }
+  showResult(rec, "secret", { isNewBest, best: isNewBest ? rec : { pct: prevBest } });
+}
+
 /* ---- スタート直後の READY → GO!: フィールド中央にドット文字を出し、終わってからゲームを動かす ---- */
 const countdownEl = document.getElementById("countdown");
 let countdown = null; // 進行中のみ { t: 経過秒, phase: "READY" | "GO" }
@@ -2793,15 +2920,18 @@ function updateCountdown(dt) {
   if (countdown.t >= CONFIG.READY_TIME + CONFIG.GO_TIME) beginPlay();
 }
 
-/* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理)。READY → GO! のあと動き出す */
-function startLevel(level) {
-  settings.startLevel = level;
-  saveSettings();
+/* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理)。READY → GO! のあと動き出す。
+   secret は隠しステージ: 語彙・出現間隔・規定数はそのレベルのまま、開始レベルの設定は変えない */
+function startLevel(level, { secret = false } = {}) {
+  if (!secret) {
+    settings.startLevel = level;
+    saveSettings();
+  }
   Object.assign(game, {
     combo: 0, maxCombo: 0, destroyed: 0,
     level, required: requiredKills(level),
     timeLeft: CONFIG.TIME_LIMIT, spurt: false,
-    started: false, over: false, cleared: false, paused: false,
+    started: false, over: false, cleared: false, paused: false, secret,
   });
   meteors = [];
   particles = [];
@@ -2822,13 +2952,14 @@ function startLevel(level) {
   shownSec = -1;
   updateTimer();
 }
+const startSecret = (level) => startLevel(level, { secret: true });
 /* 状態を全リセットしてタイトル画面に戻る */
 function goToTitle() {
   Object.assign(game, {
     combo: 0, maxCombo: 0, destroyed: 0,
     level: settings.startLevel, required: requiredKills(settings.startLevel),
     timeLeft: CONFIG.TIME_LIMIT, spurt: false,
-    started: false, over: false, cleared: false, paused: false,
+    started: false, over: false, cleared: false, paused: false, secret: false,
   });
   meteors = [];
   particles = [];
@@ -2854,6 +2985,10 @@ document.getElementById("go-next").addEventListener("click", () => {
 document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
   startLevel(game.level);
+});
+document.getElementById("go-secret").addEventListener("click", () => {
+  SFX.ensure();
+  startSecret(game.level); // いまクリアしたレベルの語彙で隠しステージへ
 });
 document.getElementById("go-close").addEventListener("click", () => {
   SFX.ensure();
@@ -2946,6 +3081,13 @@ function openRecords() {
     b.dataset.level = lv;
     b.innerHTML = `<span class="rec-lv">LEVEL ${lv}</span><span class="rec-time">${fmtTime(r.time)}</span><span class="rec-rank">${buildPixelSvg([rankFor(r.time)], "currentColor")}</span>`;
     recordsListEl.appendChild(b);
+  }
+  /* 隠しステージのベスト友好度(押しても何も出ない) */
+  if (Number.isFinite(settings.secretBest)) {
+    const d = document.createElement("div");
+    d.className = "rec rec-secret";
+    d.innerHTML = `<span class="rec-lv">？？？</span><span class="rec-time">友好度 ${settings.secretBest}%</span><span class="rec-rank"></span>`;
+    recordsListEl.appendChild(d);
   }
   recordsEl.classList.remove("hidden");
 }
@@ -3155,7 +3297,7 @@ function update(dt) {
     if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
     if (game.timeLeft <= 0) {
       game.timeLeft = 0;
-      finishGame(false);
+      game.secret ? finishSecret() : finishGame(false);
     }
 
     spawnTimer += dt;
@@ -3168,6 +3310,7 @@ function update(dt) {
       spawnMeteor();
     }
     for (const m of meteors) {
+      m.t += dt;
       m.y += m.speed * dt;
       m.rot += m.rotSpeed * dt;
     }
@@ -3197,7 +3340,24 @@ function update(dt) {
   confetti = confetti.filter((c) => c.t < c.life);
   for (const f of floaters) {
     f.t += dt;
-    f.y -= 32 * dt;
+    if (f.kind === "heart") {
+      /* ハートは UFO(いまの位置)へ一直線。届いたら火花を散らして消える */
+      const tx = ufoX();
+      const ty = ufoY();
+      const dx = tx - f.x;
+      const dy = ty - f.y;
+      const d = Math.hypot(dx, dy);
+      const step = CONFIG.HEART_SPEED * dt;
+      if (d <= step) {
+        f.t = f.life;
+        spawnParticles(tx, ty, CONFIG.HEART_PARTICLES);
+      } else {
+        f.x += (dx / d) * step;
+        f.y += (dy / d) * step;
+      }
+    } else {
+      f.y -= 32 * dt;
+    }
   }
   floaters = floaters.filter((f) => f.t < f.life);
   dangerFlash = Math.max(0, dangerFlash - dt * 1.5);
@@ -3265,7 +3425,13 @@ function drawMeteor(m) {
   }
   ctx.restore();
 
-  /* ロック中の照準: 四隅のブラケットが明滅する */
+  drawLockBracket(m);
+  drawFallerText(m, PALETTE.CHAR_NEXT, PALETTE.CHAR_REST, PALETTE.CHAR_OUTLINE);
+  ctx.restore();
+}
+
+/* ロック中の照準: 四隅のブラケットが明滅する(隕石・ふきだし共用。原点は本体の中心) */
+function drawLockBracket(m) {
   if (m === lockedTarget) {
     const pad = 10;
     const bx = m.rx + pad;
@@ -3283,8 +3449,10 @@ function drawMeteor(m) {
     }
     ctx.globalAlpha = 1;
   }
+}
 
-  /* 残りの読み: 次に打つ文字をハイライト、残りは淡く */
+/* 残りの読み: 次に打つ文字をハイライト、残りは淡く(隕石・ふきだし共用。原点は本体の中心) */
+function drawFallerText(m, nextColor, restColor, outlineColor) {
   ctx.font = METEOR_FONT_STR;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -3293,13 +3461,66 @@ function drawMeteor(m) {
   for (let i = m.charIdx; i < m.word.len; i++) {
     const ch = displayChar(m, i);
     ctx.lineWidth = 3;
-    ctx.strokeStyle = PALETTE.CHAR_OUTLINE;
+    ctx.strokeStyle = outlineColor;
     ctx.strokeText(ch, tx, 0);
-    ctx.fillStyle = i === m.charIdx ? PALETTE.CHAR_NEXT : PALETTE.CHAR_REST;
+    ctx.fillStyle = i === m.charIdx ? nextColor : restColor;
     ctx.fillText(ch, tx, 0);
     tx += CHAR_ADVANCE;
   }
+}
+
+/* 隠しステージのふきだし: 角丸の白い枠に、UFO へ向く上向きのしっぽ。出現直後は小さく生まれて膨らむ。
+   落下・ロック・入力は隕石と同じデータ(meteors)で、描き方だけ違う */
+function drawBubble(m) {
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  const pop = Math.max(0.01, Math.min(1, m.t / CONFIG.BUBBLE_POP)); // 0 だと変換が退化する
+  ctx.scale(pop, pop);
+  const locked = m === lockedTarget;
+  const w = m.rx * 2;
+  const h = m.ry * 2;
+  const rr = 12;   // 角の丸み
+  const tw = 7;    // しっぽの半幅
+  const th = 9;    // しっぽの高さ
+  const x0 = -w / 2, y0 = -h / 2, x1 = w / 2, y1 = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x0 + rr, y0);
+  ctx.lineTo(-tw, y0);
+  ctx.lineTo(0, y0 - th);
+  ctx.lineTo(tw, y0);
+  ctx.lineTo(x1 - rr, y0);
+  ctx.quadraticCurveTo(x1, y0, x1, y0 + rr);
+  ctx.lineTo(x1, y1 - rr);
+  ctx.quadraticCurveTo(x1, y1, x1 - rr, y1);
+  ctx.lineTo(x0 + rr, y1);
+  ctx.quadraticCurveTo(x0, y1, x0, y1 - rr);
+  ctx.lineTo(x0, y0 + rr);
+  ctx.quadraticCurveTo(x0, y0, x0 + rr, y0);
+  ctx.closePath();
+  ctx.shadowColor = locked ? PALETTE.METEOR_GLOW_LOCK : PALETTE.BUBBLE_GLOW;
+  ctx.shadowBlur = locked ? CONFIG.LOCK_GLOW_BLUR : CONFIG.METEOR_GLOW_BLUR;
+  ctx.fillStyle = locked ? PALETTE.BUBBLE_BODY_LOCK : PALETTE.BUBBLE_BODY;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = locked ? PALETTE.BUBBLE_EDGE_LOCK : PALETTE.BUBBLE_EDGE;
+  ctx.lineWidth = locked ? 2 : 1.5;
+  ctx.stroke();
+  drawLockBracket(m);
+  drawFallerText(m, PALETTE.BUBBLE_CHAR_NEXT, PALETTE.BUBBLE_CHAR_REST, PALETTE.BUBBLE_CHAR_OUTLINE);
   ctx.restore();
+}
+
+/* 打ち返したことばがハートになって UFO へ飛ぶ(floater の一種。update() で UFO を追う) */
+function spawnHeart(m) {
+  floaters.push({ x: m.x, y: m.y, text: "", t: 0, life: 3, kind: "heart" });
+}
+
+function drawHeart(x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + s);
+  ctx.bezierCurveTo(x - s * 1.4, y - s * 0.1, x - s * 0.7, y - s * 1.1, x, y - s * 0.35);
+  ctx.bezierCurveTo(x + s * 0.7, y - s * 1.1, x + s * 1.4, y - s * 0.1, x, y + s);
+  ctx.fill();
 }
 
 const FONT_UI = "'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif";
@@ -3332,6 +3553,153 @@ function drawEarth() {
     ctx.ellipse(fieldW * fx, top + h * dy, fieldW * w * 0.5, h * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+/* ---- 隠しステージの UFO: 横に漂う円盤と、ドームの中の宇宙人 ---- */
+const ufoX = () => fieldW / 2 + Math.sin((lastTime / 1000) * CONFIG.UFO_SWAY_SPEED) * CONFIG.UFO_SWAY;
+const ufoY = () => CONFIG.UFO_Y + Math.sin((lastTime / 1000) * 1.7) * 3;
+
+/* 宇宙人の機嫌(0〜3): 友好度が SECRET_FACE_STEPS を超えるごとに1段上がる */
+function alienMood() {
+  const pct = secretPct();
+  let mood = 0;
+  for (const step of CONFIG.SECRET_FACE_STEPS) if (pct >= step) mood++;
+  return mood;
+}
+
+/* 4つ角の星(100% のときの目) */
+function drawSparkle(x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+    const rr = i % 2 === 0 ? r : r * 0.4;
+    const px = x + Math.cos(a) * rr;
+    const py = y + Math.sin(a) * rr;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* 宇宙人の顔。r は頭の半径。mood 0: 無表情 / 1: にっこり / 2: 大喜び / 3: 目が星 */
+function drawAlien(cx, cy, r, mood, now) {
+  ctx.save();
+  ctx.translate(cx, cy + Math.sin(now * 3) * 1.5);
+  ctx.fillStyle = PALETTE.ALIEN_SKIN;
+  ctx.strokeStyle = PALETTE.ALIEN_SKIN;
+  ctx.lineWidth = 2;
+  /* 触角 */
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(s * r * 0.4, -r * 0.85);
+    ctx.lineTo(s * r * 0.7, -r * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(s * r * 0.7, -r * 1.55, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  /* 頭 */
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r, r * 1.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  /* 目 */
+  const ex = r * 0.42, ey = -r * 0.12, er = r * 0.24;
+  for (const s of [-1, 1]) {
+    if (mood >= 3) {
+      ctx.fillStyle = PALETTE.ALIEN_STAR;
+      drawSparkle(s * ex, ey, er * 1.4);
+    } else if (mood === 2) {
+      ctx.strokeStyle = PALETTE.ALIEN_EYE;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(s * ex, ey + er * 0.5, er, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = PALETTE.ALIEN_EYE;
+      ctx.beginPath();
+      ctx.ellipse(s * ex, ey, er * 0.8, er * (mood === 0 ? 1.15 : 1), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PALETTE.ALIEN_EYE_SHINE;
+      ctx.beginPath();
+      ctx.arc(s * ex - er * 0.25, ey - er * 0.35, er * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  /* ほほ(にっこり以上) */
+  if (mood >= 1) {
+    ctx.fillStyle = PALETTE.ALIEN_CHEEK;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(s * r * 0.62, r * 0.28, r * 0.18, r * 0.11, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  /* 口 */
+  ctx.strokeStyle = PALETTE.ALIEN_EYE;
+  ctx.fillStyle = PALETTE.ALIEN_EYE;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  if (mood === 0) {
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.18, r * 0.42);
+    ctx.lineTo(r * 0.18, r * 0.42);
+    ctx.stroke();
+  } else if (mood === 1) {
+    ctx.beginPath();
+    ctx.arc(0, r * 0.3, r * 0.3, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(0, r * 0.36, r * 0.36, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawUfo() {
+  const now = lastTime / 1000;
+  const w = CONFIG.UFO_W;
+  ctx.save();
+  ctx.translate(ufoX(), ufoY());
+  /* ドーム(円盤の奥)と、その中の宇宙人 */
+  const domeR = w * 0.25;
+  const domeY = -w * 0.03;
+  ctx.beginPath();
+  ctx.arc(0, domeY, domeR, Math.PI, 0);
+  ctx.closePath();
+  ctx.fillStyle = PALETTE.UFO_DOME;
+  ctx.fill();
+  drawAlien(0, domeY - domeR * 0.42, domeR * 0.5, alienMood(), now);
+  ctx.beginPath();
+  ctx.arc(0, domeY, domeR, Math.PI, 0);
+  ctx.strokeStyle = PALETTE.UFO_DOME_EDGE;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  /* 円盤 */
+  const body = ctx.createLinearGradient(0, -w * 0.13, 0, w * 0.13);
+  body.addColorStop(0, PALETTE.UFO_BODY);
+  body.addColorStop(1, PALETTE.UFO_BODY_DARK);
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, w / 2, w * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = PALETTE.UFO_RIM;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  /* 縁のライト: 順に点灯して回る */
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    const lx = (i / (n - 1) - 0.5) * w * 0.78;
+    const on = (Math.floor(now * 4) + i) % n === 0;
+    ctx.fillStyle = PALETTE.UFO_LIGHTS[i % PALETTE.UFO_LIGHTS.length];
+    ctx.globalAlpha = on ? 1 : 0.35;
+    ctx.beginPath();
+    ctx.arc(lx, w * 0.045, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 
@@ -3427,10 +3795,12 @@ function draw() {
   ctx.globalAlpha = 1;
 
   drawEarth();
+  if (game.secret) drawUfo();
 
-  /* ロック中の隕石は最後に描いて最前面に(重なっても文字が読めるように) */
-  for (const m of meteors) if (m !== lockedTarget) drawMeteor(m);
-  if (lockedTarget && meteors.includes(lockedTarget)) drawMeteor(lockedTarget);
+  /* ロック中の隕石は最後に描いて最前面に(重なっても文字が読めるように)。隠しステージはふきだし */
+  const drawFaller = game.secret ? drawBubble : drawMeteor;
+  for (const m of meteors) if (m !== lockedTarget) drawFaller(m);
+  if (lockedTarget && meteors.includes(lockedTarget)) drawFaller(lockedTarget);
 
   drawBeams();
 
@@ -3456,6 +3826,14 @@ function draw() {
       ctx.fillStyle = PALETTE.FLOAT_PENALTY;
       ctx.font = `800 22px ${FONT_UI}`;
       ctx.fillText(f.text, f.x, f.y);
+    } else if (f.kind === "heart") {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = PALETTE.FLOAT_HEART;
+      drawHeart(f.x, f.y, 9);
+    } else if (f.kind === "unheard") {
+      ctx.fillStyle = PALETTE.FLOAT_UNHEARD;
+      ctx.font = `800 20px ${FONT_UI}`;
+      ctx.fillText(f.text, f.x, f.y);
     } else {
       ctx.fillStyle = PALETTE.FLOAT_WORD;
       ctx.font = `bold 16px ${FONT_UI}`;
@@ -3465,10 +3843,12 @@ function draw() {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したら撃破数が1戻る */
-  ctx.fillStyle = `rgba(${PALETTE.DANGER_RGB}, ${0.35 + dangerFlash * 0.65})`;
-  const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
-  ctx.fillRect(0, fieldH - lh, fieldW, lh);
+  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したら撃破数が1戻る(隠しステージには無い) */
+  if (!game.secret) {
+    ctx.fillStyle = `rgba(${PALETTE.DANGER_RGB}, ${0.35 + dangerFlash * 0.65})`;
+    const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
+    ctx.fillRect(0, fieldH - lh, fieldW, lh);
+  }
 
   drawFx();
 }

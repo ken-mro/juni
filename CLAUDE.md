@@ -50,7 +50,8 @@ npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
 8. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす。下端には地球の地平線 `drawEarth()`（装飾。高さ `CONFIG.EARTH_H` は `--earth-h` として `#chip` の位置にも使う）があり、正しい入力のたびに地球の頂点から隕石へビーム `fireBeam()` / `drawBeams()` が走る。ロック中の隕石は最後に描いて最前面にし、岩の色を `PALETTE.METEOR_*_LOCK` に変える。記録更新の紙吹雪 `confetti` はモーダルより上の全画面 `#fx` canvas（`drawFx()`）に描く
 9. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
 10. **ゲーム状態・入力・UI配線**: `game`（`timeLeft`/`level`/`destroyed`/`required`/`combo`）、統計 `stats`、記録 `juni.records`、`showResult(rec, mode)`（clear / fail / view の3モード）、`finishGame(cleared)`、`startLevel(level)`（READY → GO! の `countdown` を仕込み、`updateCountdown(dt)` が `CONFIG.READY_TIME` + `GO_TIME` 秒後に `beginPlay()` で `game.started = true` と BGM 開始）、開始レベル選択、記録一覧、共有画像 `buildShareImage` / `shareResult`
-11. **クラウド同期 `Cloud`**（記録セクションの直後）: `init()`（起動時に `/api/me` → ログイン中なら `pull()`）、`pull()`（サーバーと手元を `mergeData` で統合して `apply()`）、`push()`（`PUT /api/data`。差分がなければ送らない）、`schedulePush()`（`CLOUD.PUSH_DELAY` 秒待ってまとめる）。`saveRecords` / `saveSettings` は `markLocalChange()` を通る。タイトル画面下部の `#cloud` にログイン導線と状態を表示
+11. **隠しステージ「ファーストコンタクト」**（`finishSecret` / `startSecret` / `drawUfo` / `drawBubble`）: `CONFIG.SECRET_EVERY`（5）の倍数のレベルをクリアしたリザルトにだけ「?」ボタン `#go-secret` が出る。押すと `startSecret(level)` = `startLevel(level, { secret: true })` で `game.secret = true` のまま同じレベルの語彙・出現間隔・規定数で始まる。隕石の代わりに UFO の宇宙人が降らせる「ふきだし」を打ち返し、友好度 `secretPct()` = 撃破数 / 規定数（%）を上げる。1語打ち終えるとハート（floater `heart`）が UFO へ飛び、宇宙人の表情が `CONFIG.SECRET_FACE_STEPS` で変わる。終了は「友好度 100%」か時間切れで、失敗は無い。リザルトは `showResult(rec, "secret")`（見出し THANK YOU、友好度%、ランク・共有・次のレベル無し、「タイトルへ」のみ）
+12. **クラウド同期 `Cloud`**（記録セクションの直後）: `init()`（起動時に `/api/me` → ログイン中なら `pull()`）、`pull()`（サーバーと手元を `mergeData` で統合して `apply()`）、`push()`（`PUT /api/data`。差分がなければ送らない）、`schedulePush()`（`CLOUD.PUSH_DELAY` 秒待ってまとめる）。`saveRecords` / `saveSettings` は `markLocalChange()` を通る。タイトル画面下部の `#cloud` にログイン導線と状態を表示
 
 ### バックエンド `worker/index.js`（Cloudflare Worker）
 
@@ -69,14 +70,15 @@ npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
 - **1プレイ = 1レベル（固定）**。終了条件は「`destroyed >= required` でクリア」か「`TIME_LIMIT` の時間切れ」の2つだけ。ライフもスコアもない
 - **規定数** `requiredKills(level) = max(1, round(TIME_LIMIT / spawnIntervalFor(level) * CLEAR_RATIO))`。出現間隔を変えると規定数も変わる
 - **着地は撃破数 −1**（0未満にならない）＋コンボリセット＋揺れ。ミス入力はコンボリセットのみ
+- **隠しステージは平和**: ビーム・爆発・危険ライン・揺れ・減点が無い（ふきだしの着地は「…？」と消えてコンボが切れるだけ）。`game.level` はクリアしたレベルのまま（`settings.startLevel` は変えない）で、`juni.records` には何も書かない（`maxClearedLevel()` と解放上限に影響しない）。結果はベスト友好度 `settings.secretBest`（0〜100）だけを更新し、記録一覧の末尾に「？？？」行として出す。隠しステージから戻る先はタイトルだけ
 - **場の補充**: 隕石が `METEOR_MIN` 未満なら出現間隔を待たずに補充する（`SPAWN_MIN_GAP` は空ける）。速く撃破するほど早くクリアできる根拠
 - **開始レベル**: 解放上限 = `maxClearedLevel() + 1`（上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロール。`startLevel(level)` は `settings.startLevel` も更新する
 - **記録**: クリア時のみ更新。`juni.records[level]` はベストタイム更新（初クリア含む）のときだけ丸ごと置き換える。時間切れは記録に触れない。行別正答率の ↑↓ は同レベルの前ベストとの比較
 - **リザルトの遷移**: クリア「次のレベルへ」と時間切れ「もう一度」は `startLevel()` で開始（タイトルを経由しない。READY → GO! の間は `game.started` が false で、隕石・タイマー・入力すべて止まっている）。「タイトルへ」と一時停止「やり直す」は `goToTitle()`。記録閲覧（view）の「閉じる」はオーバーレイを閉じるだけ（下にタイトルが残っている）
 - **ドット文字は1か所のデータから**: ロゴも英字見出しもすべて `PIXEL_FONT` から描く。`PIXEL_FONT` にない文字は空白として描かれる（日本語は描けない。日本語の見出しは明朝体のまま）。ロゴの文字を変えるときは `LOGO.LINES` を、見出しの文言は `PIXEL_HEADINGS` を変える。HUD の幅は2段構成が前提（狭い端末は `--logo-hud-h-narrow` で縮める）
 - **共有画像**: `buildShareImage(rec)` は 1080×1080 の canvas を返す純関数。`shareResult()` は Web Share API（`navigator.canShare({files})`）→ 失敗/非対応なら `#share` に `<img>` とダウンロードリンクを出す
-- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel）/ `juni.sync`（`{ updatedAt }` 手元の記録・設定を最後に変えた時刻）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
-- **クラウド同期の統合規則**（端末側 `Cloud.mergeData` とサーバー側 `mergeData` で同一）: 記録はレベルごとに**タイムが短いほう**、設定は **`updatedAt` が新しいほう**。サーバーから受け取ったデータの書き戻し中は `applyingCloud` で「手元の変更」扱いにしない（無限に押し返さないため）。プレイ中は設定を書き戻さない（音やヒントが途中で変わらないように）
+- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel, secretBest）/ `juni.sync`（`{ updatedAt }` 手元の記録・設定を最後に変えた時刻）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
+- **クラウド同期の統合規則**（端末側 `Cloud.mergeData` とサーバー側 `mergeData` で同一）: 記録はレベルごとに**タイムが短いほう**、設定は **`updatedAt` が新しいほう**（ただし `settings.secretBest` は端末側で**高いほう**を取る。サーバーは設定を丸ごと扱うので変更不要）。サーバーから受け取ったデータの書き戻し中は `applyingCloud` で「手元の変更」扱いにしない（無限に押し返さないため）。プレイ中は設定を書き戻さない（音やヒントが途中で変わらないように）
 - **ログインは任意**。未ログイン・バックエンド無しでも従来どおり localStorage だけで動く。ログアウトしても手元の記録は消さない
 
 ## 進め方（このリポジトリでの合意事項）

@@ -246,7 +246,7 @@ html, body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 8px;
+  bottom: calc(var(--earth-h, 0px) + 6px); /* 地平線(canvas の地球。高さは CONFIG.EARTH_H が --earth-h に入れる)の上に載せる */
   font-size: 13px;
   letter-spacing: 0.15em;
   color: var(--dim);
@@ -266,10 +266,19 @@ html, body {
   background: rgba(27, 18, 82, 0.72);
 }
 .modal.hidden { display: none; }
-/* 重なり順: タイトルの上にリザルト(記録の閲覧)、その上に記録一覧・共有画像が乗る */
+/* 重なり順: タイトルの上にリザルト(記録の閲覧)、その上に記録一覧・共有画像が乗る。
+   紙吹雪の canvas(#fx)はすべてのモーダルより上(記録更新の演出がリザルトに隠れないように) */
 #overlay { z-index: 21; }
 #records { z-index: 22; }
 #share   { z-index: 23; }
+#fx {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 24;
+  pointer-events: none;
+}
 .modal .panel {
   width: min(84vw, 350px);
   max-height: 90dvh;
@@ -350,8 +359,15 @@ html, body {
   font-style: normal;
   font-weight: 700;
   vertical-align: 2px;
+  /* 表示されるたびに弾む(display:none から出た瞬間に再生される。showResult() が毎回いったん hidden に戻す) */
+  animation: badge-pop 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
 .badge.hidden { display: none; }
+@keyframes badge-pop {
+  0%   { transform: scale(0); box-shadow: 0 0 0 0 var(--ember); }
+  60%  { transform: scale(1.3); box-shadow: 0 0 18px 4px var(--ember); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
 .sec-title {
   margin-top: 16px;
   text-align: left;
@@ -822,6 +838,9 @@ i.down { color: var(--danger); }
   </div>
 </div>
 
+<!-- 記録更新の紙吹雪。モーダルより上に重ねる全画面 canvas(操作は透過) -->
+<canvas id="fx"></canvas>
+
 <script>
 "use strict";
 
@@ -853,10 +872,26 @@ const CONFIG = {
   METEOR_RY: 26,        // 隕石の縦半径(px)。横半径は文字数から決まる
   HIT_PARTICLES: 8,     // 1文字消したときの破片の数
   BOOM_PARTICLES: 26,   // 破壊時の破片の数
-  CONFETTI: 110,        // 記録更新時に降らせる紙吹雪の数
+  PARTICLE_GRAVITY: 120,// 破片に掛かる重力(px/秒²)
+  METEOR_GLOW_BLUR: 18, // 隕石の縁の燃えるにじみ(px)
+  LOCK_GLOW_BLUR: 24,   // ロック中の隕石のにじみ(少し強く光る)
   SHAKE_AMP: 6,         // 隕石着地時の画面揺れの振幅(px)
   SHAKE_DECAY: 18,      // 揺れの減衰速度(px/秒)
   SKY_LERP: 2.0,        // 空色の追従速度(1/秒)
+
+  /* 地球(フィールド下端の地平線。装飾であり着地判定は canvas 下端のまま)と、そこから撃つビーム */
+  EARTH_H: 16,          // 地平線として見える地球の高さ(px)。#chip はこの上に載る
+  EARTH_R: 1.6,         // 地球の半径(フィールド幅に対する倍率。大きいほど平らな地平線)
+  BEAM_LIFE: 0.14,      // ビームが残って消えるまでの秒数
+  BEAM_W: 2,            // ビームの芯の太さ(px)
+  BEAM_GLOW_W: 8,       // ビームの外側の光の太さ(px)
+  BEAM_BOOM_SCALE: 2,   // 撃破の一撃はこの倍率で太く
+  MUZZLE_R: 12,         // 発射口(地球の頂点)の光の半径(px)
+
+  /* 記録更新の紙吹雪(リザルトの上に重ねる #fx canvas に降らせる) */
+  CONFETTI: 110,        // 紙吹雪の数(幅 400px あたり。広い画面では幅に応じて増える)
+  CONFETTI_LIFE: 3.0,   // 紙吹雪が消えるまでの秒数(±30%のばらつき)
+  CONFETTI_GRAVITY: 90, // 紙吹雪に掛かる重力(px/秒²)
 
   SOUND_VOLUME: 0.5,    // 効果音の全体音量(0で無音)
   BGM_VOLUME: 0.25,     // BGMの全体音量(0で無音)。効果音とは独立に調整する
@@ -928,6 +963,18 @@ const PALETTE = {
   CHAR_REST: "#d6d5ff",
   CHAR_OUTLINE: "rgba(18, 12, 60, 0.85)",
   LOCK: "#4ff0e6",
+  /* ロック中の隕石: 岩を少し明るく、縁とにじみを照準と同じシアンに */
+  METEOR_BODY_LOCK: "#5b4fc4",
+  METEOR_EDGE_LOCK: "#4ff0e6",
+  METEOR_GLOW_LOCK: "rgba(79, 240, 230, 0.75)",
+  /* 地球(favicon と同じ配色)とビーム */
+  EARTH_OCEAN: "#2f86dc",
+  EARTH_OCEAN_DEEP: "#1f5fb0",
+  EARTH_LAND: "#7dffb0",
+  EARTH_ATMO: "rgba(79, 240, 230, 0.35)",
+  BEAM: "rgba(79, 240, 230, 0.4)",
+  BEAM_CORE: "#e6fffd",
+  MUZZLE: "#4ff0e6",
   PARTICLES: ["#ffd93d", "#4ff0e6", "#ff6fb5", "#ffffff"],
   DANGER_RGB: "255, 92, 122",
   FLOAT_WORD: "#ffd93d",
@@ -1432,6 +1479,8 @@ function resizeCanvas() {
 
 new ResizeObserver(resizeCanvas).observe(fieldEl);
 resizeCanvas();
+/* 地平線の高さを CSS にも渡す(#chip を地球の上に載せるため。値の真実は CONFIG.EARTH_H) */
+fieldEl.style.setProperty("--earth-h", `${CONFIG.EARTH_H}px`);
 
 /* ---- 空の色: レベルに応じた目標色へ毎フレームなじませる ---- */
 function hexToRgb(hex) {
@@ -1515,6 +1564,8 @@ const CHAR_ADVANCE = CONFIG.METEOR_FONT * 1.15; // 1文字ぶんの送り幅
 
 let meteors = [];
 let particles = [];
+let beams = [];    // 地球から隕石へ撃ったビーム(短く残って消える)
+let confetti = []; // 記録更新の紙吹雪(ウィンドウ座標。#fx canvas に描く)
 let spawnTimer = CONFIG.SPAWN_INTERVAL; // 起動直後に1体出す
 let dangerFlash = 0;
 let shake = 0; // 画面揺れの残り振幅(px)
@@ -1600,17 +1651,41 @@ function spawnParticles(x, y, n) {
   }
 }
 
-/* 記録更新: 上から紙吹雪を降らせる */
+/* 記録更新: ウィンドウの上端から紙吹雪を降らせる(リザルトの上に重なる #fx canvas に描く)。
+   n は幅 400px あたりの数で、広い画面ではそのぶん増やす */
 function spawnConfetti(n) {
-  for (let i = 0; i < n; i++) {
-    particles.push({
-      x: Math.random() * fieldW, y: -10 - Math.random() * 60,
+  const w = window.innerWidth;
+  const count = Math.round(n * Math.min(3, Math.max(1, w / 400)));
+  for (let i = 0; i < count; i++) {
+    confetti.push({
+      x: Math.random() * w, y: -10 - Math.random() * 80,
       vx: (Math.random() - 0.5) * 70, vy: 30 + Math.random() * 80,
-      life: 2.2 + Math.random() * 1.2, t: 0,
-      r: 2 + Math.random() * 3,
+      w: 4 + Math.random() * 4, h: 2 + Math.random() * 3,
+      rot: Math.random() * Math.PI, rotSpeed: (Math.random() - 0.5) * 8,
+      life: CONFIG.CONFETTI_LIFE * (0.7 + Math.random() * 0.6), t: 0,
       color: pickColor(),
     });
   }
+}
+
+/* 発射口: 地球(地平線)の頂点 */
+const muzzleX = () => fieldW / 2;
+const muzzleY = () => fieldH - CONFIG.EARTH_H;
+
+/* 地球から隕石へビームを撃つ。着弾点は撃った瞬間の座標で固定する(撃破時は隕石が
+   もう配列に無いので追従できない。落下は遅く、残留中の移動は数px)。
+   通常の一撃は文字を横切らないよう発射口側の岩の縁に、撃破の一撃は中心に当てる */
+function fireBeam(m, boom) {
+  const x0 = muzzleX();
+  const y0 = muzzleY();
+  let x1 = m.x;
+  let y1 = m.y;
+  if (!boom) {
+    const ang = Math.atan2(y0 - m.y, x0 - m.x);
+    x1 += Math.cos(ang) * m.rx * 0.85;
+    y1 += Math.sin(ang) * m.ry * 0.85;
+  }
+  beams.push({ x0, y0, x1, y1, t: 0, life: CONFIG.BEAM_LIFE, boom });
 }
 
 /* midiノート番号 → 周波数(69 = A4 = 440Hz)。効果音とBGMで共用 */
@@ -2140,13 +2215,15 @@ function handleGameInput(token) {
     spawnParticles(target.x, target.y, CONFIG.HIT_PARTICLES);
   }
   if (target.charIdx >= target.word.len) {
+    fireBeam(target, true);
     spawnParticles(target.x, target.y, CONFIG.BOOM_PARTICLES);
     meteors = meteors.filter((m) => m !== target);
     lockedTarget = null;
     SFX.boom();
     onDestroy(target);
-  } else if (target.charProg === 0) {
-    SFX.crack();
+  } else {
+    fireBeam(target, false);
+    if (target.charProg === 0) SFX.crack();
   }
   updateHud();
   return true;
@@ -2552,7 +2629,11 @@ function showResult(rec, mode, { prev = null, isNewBest = false, best = null } =
     document.getElementById("go-rank-label").innerHTML = buildPixelSvg([PIXEL_HEADINGS.RANK_LABEL], "currentColor", "pixel rank-label");
     document.getElementById("go-rank").innerHTML = buildPixelSvg([rankFor(rec.time)], "currentColor", "pixel rank-letter");
   }
-  document.getElementById("go-newbest").classList.toggle("hidden", !isNewBest);
+  /* 記録更新バッジ: いったん隠して reflow してから出し、連続で更新したときも弾むアニメを再生する */
+  const newBestEl = document.getElementById("go-newbest");
+  newBestEl.classList.add("hidden");
+  void newBestEl.offsetWidth;
+  newBestEl.classList.toggle("hidden", !isNewBest);
   document.getElementById("go-level").textContent = rec.level;
   document.getElementById("go-best-row").classList.toggle("hidden", !best);
   if (best) document.getElementById("go-best").textContent = fmtTime(best.time);
@@ -2611,6 +2692,8 @@ function startLevel(level) {
   });
   meteors = [];
   particles = [];
+  beams = [];
+  confetti = [];
   floaters = [];
   lockedTarget = null;
   stats = newStats();
@@ -2635,6 +2718,8 @@ function goToTitle() {
   });
   meteors = [];
   particles = [];
+  beams = [];
+  confetti = [];
   floaters = [];
   lockedTarget = null;
   BGM.stop(0.4);
@@ -2979,9 +3064,19 @@ function update(dt) {
     p.t += dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vy += 120 * dt;
+    p.vy += CONFIG.PARTICLE_GRAVITY * dt;
   }
   particles = particles.filter((p) => p.t < p.life);
+  for (const b of beams) b.t += dt;
+  beams = beams.filter((b) => b.t < b.life);
+  for (const c of confetti) {
+    c.t += dt;
+    c.x += c.vx * dt;
+    c.y += c.vy * dt;
+    c.vy += CONFIG.CONFETTI_GRAVITY * dt;
+    c.rot += c.rotSpeed * dt;
+  }
+  confetti = confetti.filter((c) => c.t < c.life);
   for (const f of floaters) {
     f.t += dt;
     f.y -= 32 * dt;
@@ -3013,12 +3108,14 @@ function drawMeteor(m) {
     i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
   }
   ctx.closePath();
-  ctx.shadowColor = PALETTE.METEOR_GLOW;
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = PALETTE.METEOR_BODY;
+  /* ロック中は岩を少し明るく、縁とにじみを照準色にして「いま撃っている隕石」を示す */
+  const locked = m === lockedTarget;
+  ctx.shadowColor = locked ? PALETTE.METEOR_GLOW_LOCK : PALETTE.METEOR_GLOW;
+  ctx.shadowBlur = locked ? CONFIG.LOCK_GLOW_BLUR : CONFIG.METEOR_GLOW_BLUR;
+  ctx.fillStyle = locked ? PALETTE.METEOR_BODY_LOCK : PALETTE.METEOR_BODY;
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = PALETTE.METEOR_EDGE;
+  ctx.strokeStyle = locked ? PALETTE.METEOR_EDGE_LOCK : PALETTE.METEOR_EDGE;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
@@ -3089,6 +3186,107 @@ function drawMeteor(m) {
 
 const FONT_UI = "'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif";
 
+/* 地球: フィールド下端に地平線として見える上端の一片(中心は画面下の遠く)。
+   大気のにじみ → 海 → 円で切り抜いた陸地の順。装飾であり着地判定は canvas 下端のまま */
+function drawEarth() {
+  const r = fieldW * CONFIG.EARTH_R;
+  const cx = fieldW / 2;
+  const cy = fieldH - CONFIG.EARTH_H + r;
+  ctx.save();
+  ctx.fillStyle = PALETTE.EARTH_ATMO;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + CONFIG.EARTH_H * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+  const sea = ctx.createLinearGradient(0, fieldH - CONFIG.EARTH_H, 0, fieldH);
+  sea.addColorStop(0, PALETTE.EARTH_OCEAN);
+  sea.addColorStop(1, PALETTE.EARTH_OCEAN_DEEP);
+  ctx.fillStyle = sea;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.clip();
+  /* 陸地: 幅に対する固定位置の楕円(見えるのは地平線に掛かる部分だけ) */
+  ctx.fillStyle = PALETTE.EARTH_LAND;
+  const top = fieldH - CONFIG.EARTH_H;
+  const h = CONFIG.EARTH_H;
+  for (const [fx, w, dy] of [[0.18, 0.22, 0.55], [0.52, 0.14, 0.35], [0.82, 0.2, 0.7]]) {
+    ctx.beginPath();
+    ctx.ellipse(fieldW * fx, top + h * dy, fieldW * w * 0.5, h * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ビーム: 発射口の光 + 外側のにじみ + 細い芯。残留時間に応じて薄れる */
+function drawBeams() {
+  if (!beams.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const b of beams) {
+    const a = 1 - b.t / b.life;
+    const scale = b.boom ? CONFIG.BEAM_BOOM_SCALE : 1;
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = PALETTE.BEAM;
+    ctx.lineWidth = CONFIG.BEAM_GLOW_W * scale;
+    ctx.beginPath();
+    ctx.moveTo(b.x0, b.y0);
+    ctx.lineTo(b.x1, b.y1);
+    ctx.stroke();
+    ctx.strokeStyle = PALETTE.BEAM_CORE;
+    ctx.lineWidth = CONFIG.BEAM_W * scale;
+    ctx.stroke();
+    /* 発射口の閃光と着弾点の光点 */
+    const mr = CONFIG.MUZZLE_R * scale * (0.6 + 0.4 * a);
+    const flash = ctx.createRadialGradient(b.x0, b.y0, 0, b.x0, b.y0, mr);
+    flash.addColorStop(0, PALETTE.BEAM_CORE);
+    flash.addColorStop(0.4, PALETTE.MUZZLE);
+    flash.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = flash;
+    ctx.beginPath();
+    ctx.arc(b.x0, b.y0, mr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = PALETTE.BEAM_CORE;
+    ctx.beginPath();
+    ctx.arc(b.x1, b.y1, CONFIG.BEAM_W * scale * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* 紙吹雪: モーダルより上の #fx canvas に描く。粒が無い間は描画せず透明のまま。
+   大きさはウィンドウに合わせて必要になったときだけ揃える(常時のリサイズ監視はしない) */
+const fxCv = document.getElementById("fx");
+const fxCtx = fxCv.getContext("2d");
+let fxHadConfetti = false;
+function drawFx() {
+  if (!confetti.length) {
+    if (fxHadConfetti) {
+      fxCtx.clearRect(0, 0, fxCv.width, fxCv.height);
+      fxHadConfetti = false;
+    }
+    return;
+  }
+  const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_DPR);
+  const w = Math.round(window.innerWidth * dpr);
+  const h = Math.round(window.innerHeight * dpr);
+  if (fxCv.width !== w || fxCv.height !== h) {
+    fxCv.width = w;
+    fxCv.height = h;
+  }
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  for (const c of confetti) {
+    fxCtx.globalAlpha = Math.min(1, (1 - c.t / c.life) * 3);
+    fxCtx.fillStyle = c.color;
+    fxCtx.setTransform(dpr, 0, 0, dpr, c.x * dpr, c.y * dpr);
+    fxCtx.rotate(c.rot);
+    fxCtx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
+  }
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxCtx.globalAlpha = 1;
+  fxHadConfetti = true;
+}
+
 function draw() {
   const grad = ctx.createLinearGradient(0, 0, 0, fieldH);
   grad.addColorStop(0, rgbStr(sky[0]));
@@ -3110,7 +3308,13 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  for (const m of meteors) drawMeteor(m);
+  drawEarth();
+
+  /* ロック中の隕石は最後に描いて最前面に(重なっても文字が読めるように) */
+  for (const m of meteors) if (m !== lockedTarget) drawMeteor(m);
+  if (lockedTarget && meteors.includes(lockedTarget)) drawMeteor(lockedTarget);
+
+  drawBeams();
 
   for (const p of particles) {
     ctx.globalAlpha = 1 - p.t / p.life;
@@ -3147,6 +3351,8 @@ function draw() {
   ctx.fillStyle = `rgba(${PALETTE.DANGER_RGB}, ${0.35 + dangerFlash * 0.65})`;
   const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
   ctx.fillRect(0, fieldH - lh, fieldW, lh);
+
+  drawFx();
 }
 
 /* ---- 次のキーのヒント: ロック中の隕石(なければ最下部)の期待入力を

@@ -2362,12 +2362,11 @@ const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1,
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
 } catch {}
-delete settings.easy;       // 旧バージョンの設定は捨てる
+delete settings.easy;     // 旧バージョンの設定は捨てる
 delete settings.practice;
-delete settings.secretBest; // 旧形式(レベルを持たない隠しステージのベスト)は捨てる
 settings.secretBests = cleanSecretBests(settings.secretBests);
 
-/* 隠しステージのベスト友好度 { [レベル]: % } を型どおりに揃える(壊れた値や旧形式は捨てる) */
+/* 隠しステージのベスト友好度 { [レベル]: % } を型どおりに揃える(壊れた値は捨てる) */
 function cleanSecretBests(raw) {
   const out = {};
   if (!raw || typeof raw !== "object") return out;
@@ -2646,7 +2645,6 @@ const Cloud = (() => {
       bests[lv] = Math.max(bests[lv] ?? 0, pct);
     }
     merged.secretBests = bests;
-    delete merged.secretBest; // 旧形式が別端末から来ても復活させない
     return {
       records,
       settings: merged,

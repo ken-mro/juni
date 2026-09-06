@@ -1028,8 +1028,8 @@ const CONFIG = {
   /* 隠しステージ「ファーストコンタクト」: SECRET_EVERY の倍数のレベルをクリアしたリザルトに「?」を出す。
      UFO の宇宙人が降らせる「ふきだし」を打ち返して友好度(撃破数 / 規定数)を上げる。着地の減点は無い */
   SECRET_EVERY: 5,
-  SECRET_SPEED: 0.75,       // ふきだしの落下速度(そのレベルの隕石に対する係数)
-  SECRET_BPM: 108,          // 隠しステージの BGM テンポ(レベル・ラストスパートで変えない)
+  SECRET_SPEED: 1.0,        // ふきだしの落下速度(そのレベルの隕石に対する係数。1.0 = 同じ)
+  SECRET_BPM: 108,          // 隠しステージの BGM(専用曲)のテンポ。レベル・ラストスパートで変えない
   SECRET_FACE_STEPS: [34, 67, 100], // 宇宙人の表情が変わる友好度(%)。未満は無表情 → にっこり → 大喜び → 100% で目が星
   UFO_Y: 44,                // UFO の中心の高さ(px。フィールド上端から)
   UFO_W: 92,                // UFO の円盤の幅(px)
@@ -2014,6 +2014,50 @@ const BGM = (() => {
     [74, "-", 76, "-", 72, "-", "-", null],
   ];
   const BASS_OCT = [0, 0, 12, 0, 0, 12, 0, 12]; // ベース: 8分ごとのオクターブ跳躍
+
+  /* --- 隠しステージ「ファーストコンタクト」の曲: メジャーセブンスで浮遊感のある 8小節を2周。
+     Cmaj7 | Em7 | Fmaj7 | G | Am7 | Em7 | Fmaj7 | G6  4声のアルペジオ用に tones は4音 --- */
+  const SECRET_CHORDS = [
+    { bass: 36, tones: [60, 64, 67, 71] }, // Cmaj7
+    { bass: 40, tones: [59, 62, 64, 67] }, // Em7
+    { bass: 41, tones: [60, 64, 65, 69] }, // Fmaj7
+    { bass: 43, tones: [59, 62, 67, 71] }, // G
+    { bass: 45, tones: [60, 64, 67, 69] }, // Am7
+    { bass: 40, tones: [59, 62, 64, 67] }, // Em7
+    { bass: 41, tones: [60, 64, 65, 69] }, // Fmaj7
+    { bass: 43, tones: [59, 62, 64, 67] }, // G6
+  ];
+  /* リード: ゆったり(4分音符が中心)で、問いかけて返事を待つように休符を残す */
+  const SECRET_MELODY = [
+    [79, "-", 76, "-", 74, 76, "-", "-"],
+    [71, "-", "-", "-", 74, "-", 76, "-"],
+    [81, "-", 79, "-", 76, "-", "-", "-"],
+    [74, "-", 76, "-", 79, "-", "-", null],
+    [84, "-", 81, "-", 79, "-", 76, "-"],
+    [79, "-", "-", "-", 74, "-", "-", "-"],
+    [76, "-", 77, "-", 81, "-", 79, "-"],
+    [79, "-", "-", "-", "-", "-", null, null],
+    [72, "-", 76, "-", 79, "-", 84, "-"],
+    [83, "-", 79, "-", "-", "-", 74, "-"],
+    [77, "-", 81, "-", 84, "-", 81, "-"],
+    [79, "-", "-", "-", 76, "-", 74, "-"],
+    [72, "-", 74, "-", 76, "-", 79, "-"],
+    [83, "-", "-", "-", 79, "-", 76, "-"],
+    [81, "-", 79, "-", 77, "-", 76, "-"],
+    [74, "-", 72, "-", "-", "-", null, null],
+  ];
+  /* 曲とアレンジ。chip = 通常のチップチューン、dream = 隠しステージ(三角波の柔らかいリード+
+     8分のアルペジオ+2分音符のベース、打楽器なし、残響多め) */
+  const SONGS = {
+    main: { chords: CHORDS, melody: MELODY, style: "chip" },
+    secret: { chords: SECRET_CHORDS, melody: SECRET_MELODY, style: "dream" },
+  };
+  const song = () => (game.secret ? SONGS.secret : SONGS.main);
+  /* アレンジごとの音作り(残響の量・リードの丸め方・リードのビブラート) */
+  const STYLE = {
+    chip: { wet: 0.35, feedback: 0.28, leadLp: 5200, vibrato: 0 },
+    dream: { wet: 0.55, feedback: 0.42, leadLp: 3200, vibrato: 0.006 }, // vibrato は周波数比
+  };
   const PULSE_DUTY = 0.25;  // リードのパルス幅(25% = 定番のチップ音)
   const LOOKAHEAD = 1.2;    // 何秒先まで発音を予約するか
   const TICK_MS = 250;      // スケジューラの起床間隔(ms)。精度には影響しない
@@ -2032,7 +2076,7 @@ const BGM = (() => {
   /* レベル追従: 高レベルほど速く・リズムが密に。ラストスパートでさらに加速。
      値は小節の境界でしか反映されないため急変しない */
   function mood() {
-    if (game.secret) return { spb: 60 / CONFIG.SECRET_BPM, drive: 0 }; // 隠しステージは落ち着いた一定テンポ
+    if (game.secret) return { spb: 60 / CONFIG.SECRET_BPM, drive: 0 }; // 隠しステージは専用曲を一定テンポで
     const lv = Math.min(game.level, CONFIG.BGM_LEVEL_CAP) - 1;
     const bpm = CONFIG.BGM_BPM + lv * CONFIG.BGM_BPM_PER_LEVEL +
       (game.spurt ? CONFIG.BGM_SPURT_BPM_ADD : 0);
@@ -2044,7 +2088,7 @@ const BGM = (() => {
 
   /* BGMの出力バスと残響を組み立てる。開始のたびに作り直し、
      停止時に切り離すことで前回セッションの鳴り残りを持ち込まない */
-  function buildGraph() {
+  function buildGraph(style) {
     bus = ac.createGain();
     bus.gain.value = 0.0001;
     bus.connect(ac.destination);
@@ -2054,9 +2098,9 @@ const BGM = (() => {
     damp.type = "lowpass";
     damp.frequency.value = 2600; // 繰り返すほど残響が丸くなる
     const fb = ac.createGain();
-    fb.gain.value = 0.28;        // 残響のフィードバック量
+    fb.gain.value = style.feedback; // 残響のフィードバック量
     const wet = ac.createGain();
-    wet.gain.value = 0.35;       // 残響の返し量
+    wet.gain.value = style.wet;     // 残響の返し量
     delay.connect(damp);
     damp.connect(fb).connect(delay); // フィードバックループ
     delay.connect(wet).connect(bus);
@@ -2064,7 +2108,7 @@ const BGM = (() => {
     /* リード: 高域を少し丸めてから出す。残響へは控えめに送る */
     leadOut = ac.createBiquadFilter();
     leadOut.type = "lowpass";
-    leadOut.frequency.value = 5200;
+    leadOut.frequency.value = style.leadLp;
     leadOut.connect(bus);
     const send = ac.createGain();
     send.gain.value = 0.3;
@@ -2133,31 +2177,48 @@ const BGM = (() => {
   }
 
   /* チップコード: 矩形波の極短音。3声を16分で回して和音に聞かせる */
-  function chordNote(t, freq, dur, lp) {
+  function chordNote(t, freq, dur, lp, type = "square", vol = 0.028) {
     const osc = ac.createOscillator();
-    osc.type = "square";
+    osc.type = type;
     osc.frequency.value = freq;
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.028, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(g).connect(lp);
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
 
-  /* リード: 25%パルス波。素早く立ち上がり、少し減衰して保持する */
-  function leadNote(t, freq, dur) {
+  /* リード: 25%パルス波。素早く立ち上がり、少し減衰して保持する。
+     soft(隠しステージ)は三角波でゆっくり立ち上がり、軽いビブラートが掛かる */
+  function leadNote(t, freq, dur, soft = false) {
     const osc = ac.createOscillator();
-    osc.setPeriodicWave(pulseWave);
+    if (soft) osc.type = "triangle";
+    else osc.setPeriodicWave(pulseWave);
     osc.frequency.value = freq;
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.16, t + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.1, t + 0.07);
-    g.gain.setValueAtTime(0.1, t + Math.max(dur - 0.03, 0.08));
+    if (soft) {
+      g.gain.exponentialRampToValueAtTime(0.2, t + 0.04);
+      g.gain.setValueAtTime(0.2, t + Math.max(dur - 0.08, 0.1));
+    } else {
+      g.gain.exponentialRampToValueAtTime(0.16, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.1, t + 0.07);
+      g.gain.setValueAtTime(0.1, t + Math.max(dur - 0.03, 0.08));
+    }
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(g).connect(leadOut);
+    const vib = STYLE[song().style].vibrato;
+    if (vib > 0) {
+      const lfo = ac.createOscillator();
+      lfo.frequency.value = 5.5;
+      const depth = ac.createGain();
+      depth.gain.value = freq * vib;
+      lfo.connect(depth).connect(osc.frequency);
+      lfo.start(t);
+      lfo.stop(t + dur + 0.02);
+    }
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
@@ -2165,12 +2226,14 @@ const BGM = (() => {
   /* 1小節(4拍)ぶんをまとめて t0 から予約する。小節の長さ(秒)を返す */
   function scheduleBar(t0) {
     const { spb, drive } = mood();
+    const s = song();
+    const dream = s.style === "dream";
     const e8 = spb / 2;  // 8分音符の長さ(秒)
     const e16 = spb / 4; // 16分音符の長さ(秒)
-    const chord = CHORDS[barIdx % CHORDS.length];
-    const mel = MELODY[barIdx];
-    const isTurn = barIdx === MELODY.length - 1; // ループの折り返し小節
-    barIdx = (barIdx + 1) % MELODY.length;
+    const chord = s.chords[barIdx % s.chords.length];
+    const mel = s.melody[barIdx];
+    const isTurn = barIdx === s.melody.length - 1; // ループの折り返し小節
+    barIdx = (barIdx + 1) % s.melody.length;
 
     /* 残響の長さをテンポに追従させる(付点8分) */
     delaySend.delayTime.setTargetAtTime(spb * 0.75, t0, 0.5);
@@ -2181,16 +2244,30 @@ const BGM = (() => {
       if (typeof n !== "number") continue;
       let len = 1;
       while (i + len < 8 && mel[i + len] === "-") len++;
-      leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02);
+      leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02, dream);
+    }
+
+    const lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.connect(bus);
+
+    if (dream) {
+      /* 隠しステージ: 三角波の鈴のような 8分アルペジオ、2分音符の静かなベース、
+         打楽器は拍裏のかすかな空気音だけ(宇宙人との対話を邪魔しない) */
+      lp.frequency.value = 1800;
+      for (let i = 0; i < 8; i++) {
+        chordNote(t0 + i * e8, midiHz(chord.tones[i % chord.tones.length]), e8 * 0.9, lp, "triangle", 0.07);
+      }
+      bassNote(t0, midiHz(chord.bass), spb * 2 * 0.95);
+      bassNote(t0 + spb * 2, midiHz(chord.bass), spb * 2 * 0.95);
+      for (let b = 0; b < 4; b++) noiseHit(t0 + b * spb + spb * 0.5, 0.018, 9000, 0.06, "highpass");
+      return spb * 4;
     }
 
     /* チップコード: 16分で3声を回す(ローパスで角を取る) */
-    const lp = ac.createBiquadFilter();
-    lp.type = "lowpass";
     lp.frequency.value = 2400;
-    lp.connect(bus);
     for (let i = 0; i < 16; i++) {
-      chordNote(t0 + i * e16, midiHz(chord.tones[i % 3]), e16 * 0.9, lp);
+      chordNote(t0 + i * e16, midiHz(chord.tones[i % chord.tones.length]), e16 * 0.9, lp);
     }
 
     /* ベース: 8分刻みのオクターブ跳躍が推進力を作る */
@@ -2229,7 +2306,7 @@ const BGM = (() => {
     ac = SFX.context();
     if (!ac) return;
     if (bus) bus.disconnect(); // 前回セッションの鳴り残りを切り離す
-    buildGraph();
+    buildGraph(STYLE[song().style]);
     running = true;
     const t = ac.currentTime;
     bus.gain.setValueAtTime(0.0001, t);

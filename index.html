@@ -665,8 +665,9 @@ i.down { color: var(--danger); }
   cursor: pointer;
 }
 .ghost.hidden { display: none; }
-/* 隠しステージへの入口「?」: 5の倍数レベルのクリア時だけ出る。ゆっくり明滅して気づかせる */
+/* 隠しステージへの入口「?」: 5の倍数レベルのクリア時だけ「次のレベルへ」の上に出る。ゆっくり明滅して気づかせる */
 .secret-btn {
+  margin-top: 20px;
   color: var(--cyan);
   border-color: var(--cyan);
   font-size: 18px;
@@ -831,11 +832,11 @@ i.down { color: var(--danger); }
     <div id="go-rows" class="rowgrid"></div>
     <div class="sec-title">方向別 ミス率</div>
     <div id="go-dirs" class="dircross"></div>
+    <!-- 隠しステージへの入口。SECRET_EVERY の倍数のレベルをクリアしたときだけ出る -->
+    <button id="go-secret" class="ghost secret-btn hidden" aria-label="？">?</button>
     <button id="go-next" class="primary">次のレベルへ</button>
     <button id="go-retry" class="primary">もう一度</button>
     <button id="go-share" class="ghost">画像を共有・保存</button>
-    <!-- 隠しステージへの入口。SECRET_EVERY の倍数のレベルをクリアしたときだけ出る -->
-    <button id="go-secret" class="ghost secret-btn hidden" aria-label="？">?</button>
     <button id="go-close" class="ghost">タイトルへ</button>
   </div>
 </div>
@@ -1029,7 +1030,7 @@ const CONFIG = {
      UFO の宇宙人が降らせる「ふきだし」を打ち返して友好度(撃破数 / 規定数)を上げる。着地の減点は無い */
   SECRET_EVERY: 5,
   SECRET_SPEED: 1.0,        // ふきだしの落下速度(そのレベルの隕石に対する係数。1.0 = 同じ)
-  SECRET_BPM: 150,          // 隠しステージの BGM(専用曲)のテンポ。レベル・ラストスパートで変えない
+  SECRET_BPM: 172,          // 隠しステージの BGM(専用曲・3拍子)のテンポ。レベル・ラストスパートで変えない
   SECRET_FACE_STEPS: [34, 67, 100], // 宇宙人の表情が変わる友好度(%)。未満は無表情 → にっこり → 大喜び → 100% で目が星
   UFO_Y: 44,                // UFO の中心の高さ(px。フィールド上端から)
   UFO_W: 92,                // UFO の円盤の幅(px)
@@ -2015,49 +2016,50 @@ const BGM = (() => {
   ];
   const BASS_OCT = [0, 0, 12, 0, 0, 12, 0, 12]; // ベース: 8分ごとのオクターブ跳躍
 
-  /* --- 隠しステージ「ファーストコンタクト」の曲: 宇宙人と一緒に踊るような、明るく跳ねる 8小節を2周。
-     C | F | C | G | Am | F | G | C --- */
+  /* --- 隠しステージ「ファーストコンタクト」の曲: 宇宙人とくるくる踊るような、賑やかな3拍子の
+     ワルツ(ブン・チャッ・チャッ)。C | F | G | C | Am | F | G | C を2周 --- */
   const SECRET_CHORDS = [
     { bass: 36, tones: [60, 64, 67] }, // C
     { bass: 41, tones: [60, 65, 69] }, // F
-    { bass: 36, tones: [60, 64, 67] }, // C
     { bass: 43, tones: [59, 62, 67] }, // G
+    { bass: 36, tones: [60, 64, 67] }, // C
     { bass: 45, tones: [60, 64, 69] }, // Am
     { bass: 41, tones: [60, 65, 69] }, // F
     { bass: 43, tones: [59, 62, 67] }, // G
     { bass: 36, tones: [60, 64, 67] }, // C
   ];
-  /* リード: 8分で跳ね回り、フレーズの終わりに「ハロー？」と呼びかけるような上昇形を置く */
+  /* リード: 1小節=8分×6(3拍子)。跳ね回って、フレーズの終わりに「ハロー？」の上昇形 */
   const SECRET_MELODY = [
-    [72, 76, 79, "-", 84, "-", 79, 76],
-    [77, "-", 81, 77, 84, "-", 81, "-"],
-    [79, 76, 72, "-", 76, 79, 84, "-"],
-    [83, 79, 74, "-", 79, "-", null, null],
-    [81, "-", 84, 81, 88, "-", 84, 81],
-    [77, 81, 84, "-", 81, "-", 77, "-"],
-    [79, 83, 86, "-", 83, 79, 74, 76],
-    [72, "-", "-", null, 79, 84, null, null],
-    [84, "-", 79, 84, 76, "-", 79, "-"],
-    [81, 77, 81, "-", 84, 81, 77, "-"],
-    [76, 79, 84, "-", 86, 84, 79, "-"],
-    [83, "-", 79, 83, 86, "-", null, null],
-    [88, "-", 84, "-", 81, 84, 88, "-"],
-    [89, "-", 84, 81, 77, "-", 81, "-"],
-    [86, 83, 79, 83, 86, "-", 91, "-"],
-    [84, "-", "-", null, 79, 84, 88, "-"],
+    [72, 76, 79, 84, "-", 79],
+    [81, 77, 81, 84, "-", 81],
+    [79, 83, 86, 83, 79, 74],
+    [76, "-", 72, "-", null, 79],
+    [81, 84, 88, 84, "-", 81],
+    [77, 81, 84, 89, "-", 84],
+    [86, 83, 79, 83, 86, 91],
+    [84, "-", "-", null, 79, 84],
+    [84, 79, 76, 79, 84, 79],
+    [81, 77, 72, 77, 81, 84],
+    [83, 79, 74, 79, 83, 86],
+    [84, "-", 79, "-", 76, "-"],
+    [88, 84, 81, 84, 88, 84],
+    [89, 84, 81, 84, 89, 84],
+    [91, 86, 83, 86, 91, 86],
+    [84, "-", 88, "-", 91, "-"],
   ];
-  const SECRET_BASS = [0, 12, 7, 12, 0, 12, 7, 12]; // ベース: 根音・オクターブ・5度を跳ね回る
-  /* 曲とアレンジ。chip = 通常のチップチューン、bounce = 隠しステージ(裏拍のコード刻み+
-     跳ねるベース+軽いドラム、リードにビブラート) */
+  const SECRET_BASS = [0, null, 7, null, 12, null]; // ベース(8分×6): 1拍目に根音、3拍目に5度→オクターブの跳ね
+  /* 曲とアレンジ。beats は1小節の拍数(8分音符は beats×2 個)。
+     chip = 通常のチップチューン(4拍子)、waltz = 隠しステージ(3拍子。2・3拍で和音を刻み、
+     8分の高いアルペジオ、キック+タンバリン+8分ハット、リードにビブラート) */
   const SONGS = {
-    main: { chords: CHORDS, melody: MELODY, style: "chip" },
-    secret: { chords: SECRET_CHORDS, melody: SECRET_MELODY, style: "bounce" },
+    main: { chords: CHORDS, melody: MELODY, beats: 4, style: "chip" },
+    secret: { chords: SECRET_CHORDS, melody: SECRET_MELODY, beats: 3, style: "waltz" },
   };
   const song = () => (game.secret ? SONGS.secret : SONGS.main);
   /* アレンジごとの音作り(残響の量・リードの丸め方・リードのビブラート) */
   const STYLE = {
     chip: { wet: 0.35, feedback: 0.28, leadLp: 5200, vibrato: 0, vibratoHz: 0 },
-    bounce: { wet: 0.3, feedback: 0.25, leadLp: 6000, vibrato: 0.004, vibratoHz: 6.5 }, // vibrato は周波数比
+    waltz: { wet: 0.3, feedback: 0.25, leadLp: 6000, vibrato: 0.004, vibratoHz: 6.5 }, // vibrato は周波数比
   };
   const PULSE_DUTY = 0.25;  // リードのパルス幅(25% = 定番のチップ音)
   const LOOKAHEAD = 1.2;    // 何秒先まで発音を予約するか
@@ -2222,7 +2224,9 @@ const BGM = (() => {
   function scheduleBar(t0) {
     const { spb, drive } = mood();
     const s = song();
-    const bounce = s.style === "bounce";
+    const waltz = s.style === "waltz";
+    const beats = s.beats;
+    const n8 = beats * 2;   // 1小節の8分音符の数
     const e8 = spb / 2;  // 8分音符の長さ(秒)
     const e16 = spb / 4; // 16分音符の長さ(秒)
     const chord = s.chords[barIdx % s.chords.length];
@@ -2234,11 +2238,11 @@ const BGM = (() => {
     delaySend.delayTime.setTargetAtTime(spb * 0.75, t0, 0.5);
 
     /* リード: "-" が続くぶん音を伸ばす */
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < n8; i++) {
       const n = mel[i];
       if (typeof n !== "number") continue;
       let len = 1;
-      while (i + len < 8 && mel[i + len] === "-") len++;
+      while (i + len < n8 && mel[i + len] === "-") len++;
       leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02);
     }
 
@@ -2246,42 +2250,45 @@ const BGM = (() => {
     lp.type = "lowpass";
     lp.connect(bus);
 
-    if (bounce) {
-      /* 隠しステージ: 裏拍(8分の裏)で和音を短く刻むスカ風の跳ね、根音・オクターブ・5度を
-         飛び回るベース、軽いキック・スネアと8分ハット。折り返しでスネアの助走 */
+    if (waltz) {
+      /* 隠しステージ(3拍子): 1拍目にキック+ベース(ブン)、2・3拍目に和音の刻みとタンバリン(チャッ・チャッ)、
+         8分で走る高いアルペジオが賑やかさを足す。ハットは8分すべて。折り返しでスネアの助走 */
       lp.frequency.value = 3200;
-      for (let i = 1; i < 8; i += 2) {
-        for (const tone of chord.tones) chordNote(t0 + i * e8, midiHz(tone), e8 * 0.45, lp, "square", 0.022);
+      for (let b = 1; b < beats; b++) {
+        for (const tone of chord.tones) chordNote(t0 + b * spb, midiHz(tone), spb * 0.4, lp, "square", 0.024);
       }
-      for (let i = 0; i < 8; i++) bassNote(t0 + i * e8, midiHz(chord.bass + SECRET_BASS[i]), e8 * 0.8);
-      for (let b = 0; b < 4; b++) {
+      for (let i = 0; i < n8; i++) {
+        chordNote(t0 + i * e8, midiHz(chord.tones[i % chord.tones.length] + 12), e8 * 0.6, lp, "triangle", 0.05);
+        if (SECRET_BASS[i] !== null) bassNote(t0 + i * e8, midiHz(chord.bass + SECRET_BASS[i]), e8 * 1.6);
+      }
+      for (let b = 0; b < beats; b++) {
         const t = t0 + b * spb;
-        kick(t, b % 2 === 0 ? 0.32 : 0.18);
-        if (b % 2 === 1) noiseHit(t, 0.07, 1800, 0.1, "bandpass");     // スネア
-        noiseHit(t, 0.03, 7000, 0.03, "highpass");                     // ハット(表)
-        noiseHit(t + spb * 0.5, 0.045, 7000, 0.04, "highpass");        // ハット(裏。少し強く)
+        if (b === 0) kick(t, 0.38);
+        else noiseHit(t, 0.05, 4200, 0.09, "bandpass");            // タンバリン風(2・3拍)
+        noiseHit(t, 0.03, 7000, 0.03, "highpass");                 // ハット(表)
+        noiseHit(t + spb * 0.5, 0.04, 7000, 0.04, "highpass");     // ハット(裏)
       }
       if (isTurn) {
-        noiseHit(t0 + spb * 3.5, 0.06, 1800, 0.1, "bandpass");
-        noiseHit(t0 + spb * 3.75, 0.08, 1800, 0.1, "bandpass");
+        noiseHit(t0 + spb * 2.5, 0.06, 1800, 0.1, "bandpass");
+        noiseHit(t0 + spb * 2.75, 0.08, 1800, 0.1, "bandpass");
       }
-      return spb * 4;
+      return spb * beats;
     }
 
     /* チップコード: 16分で3声を回す(ローパスで角を取る) */
     lp.frequency.value = 2400;
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < beats * 4; i++) {
       chordNote(t0 + i * e16, midiHz(chord.tones[i % chord.tones.length]), e16 * 0.9, lp);
     }
 
     /* ベース: 8分刻みのオクターブ跳躍が推進力を作る */
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < n8; i++) {
       bassNote(t0 + i * e8, midiHz(chord.bass + BASS_OCT[i]), e8 * 0.9);
     }
 
     /* ドラム: キックは1・3拍(レベルが上がると2・4拍が加わり四つ打ちへ)、
        スネアは2・4拍、ハットは8分裏(レベルが上がると16分が加わる) */
-    for (let b = 0; b < 4; b++) {
+    for (let b = 0; b < beats; b++) {
       const t = t0 + b * spb;
       kick(t, b % 2 === 0 ? 0.42 : 0.42 * drive);
       if (b % 2 === 1) noiseHit(t, 0.1, 1800, 0.12, "bandpass");        // スネア
@@ -2291,10 +2298,10 @@ const BGM = (() => {
     }
     /* 折り返し小節の終わりにスネアの助走(次のループへの期待感) */
     if (isTurn) {
-      noiseHit(t0 + spb * 3.5, 0.07, 1800, 0.1, "bandpass");
-      noiseHit(t0 + spb * 3.75, 0.09, 1800, 0.1, "bandpass");
+      noiseHit(t0 + spb * (beats - 0.5), 0.07, 1800, 0.1, "bandpass");
+      noiseHit(t0 + spb * (beats - 0.25), 0.09, 1800, 0.1, "bandpass");
     }
-    return spb * 4;
+    return spb * beats;
   }
 
   /* 先読みスケジューラ本体。LOOKAHEAD先までの小節をまとめて予約する */
@@ -2920,7 +2927,7 @@ function showResult(rec, mode, { prev = null, isNewBest = false, best = null } =
   document.getElementById("go-combo").textContent = rec.maxCombo;
   renderResultStats(rec, prev);
   document.getElementById("go-next").classList.toggle("hidden", mode !== "clear");
-  document.getElementById("go-retry").classList.toggle("hidden", mode !== "fail");
+  document.getElementById("go-retry").classList.toggle("hidden", mode !== "fail" && !secret); // 隠しステージも再挑戦できる
   document.getElementById("go-share").classList.toggle("hidden", !cleared || secret);
   /* 隠しステージへの「?」: SECRET_EVERY の倍数のレベルをいまクリアしたときだけ */
   document.getElementById("go-secret").classList.toggle("hidden",
@@ -3085,7 +3092,7 @@ document.getElementById("go-next").addEventListener("click", () => {
 });
 document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
-  startLevel(game.level);
+  game.secret ? startSecret(game.level) : startLevel(game.level); // 隠しステージは説明を挟まず再開
 });
 /* 「?」→ 説明パネル → 「スタート」で、いまクリアしたレベルの語彙のまま隠しステージへ */
 const secretIntroEl = document.getElementById("secret-intro");

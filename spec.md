@@ -196,7 +196,8 @@ function analyze(kana) {
 - **内容**: 空の色が変わり、上部に UFO が漂う。ドームの中の宇宙人が「ふきだし」のことば（そのレベルの語彙）を降らせるので、フリックで打ち返す。1文字ごとに火花、1語打ち終えるとハートが UFO へ飛んで**友好度**（撃破数 / 規定数。規定数はそのレベルと同じ）が上がる。宇宙人の表情は友好度で 無表情 → にっこり → 大喜び → 100% で目が星 と変わる
 - **平和的**: 撃たない・壊さない・減点しない。ふきだしが下端に着いても「…？」と消えてコンボが切れるだけ。危険ラインも揺れも無い
 - **終了**: 60秒（通常と同じ）か友好度 100% で終了。**失敗は無い**。落下速度・出現間隔・規定数はそのレベルの隕石と同じ（`SECRET_SPEED` は 1.0）。BGM は専用曲（下記）
-- **記録**: ベスト友好度だけを `juni.settings.secretBest` に保存する（`juni.records` には触れない。開始レベルの解放にも影響しない）。記録一覧の末尾に「？？？ 友好度 NN%」の行を出す（タップしても何も出ない）。クラウド同期では高いほうを取る
+- **記録**: 入ったレベルごとのベスト友好度だけを `juni.settings.secretBests[level]` に保存する（`juni.records` には触れない。開始レベルの解放にも影響しない）。記録一覧ではそのレベルの直後に「？？？ 友好度 NN%」の行を出す（タップしても何も出ない）。クラウド同期ではレベルごとに高いほうを取る。旧形式（レベル無しの `secretBest`）は起動時に捨てる
+- **宇宙人の色**: 入ったレベルごとに肌の色が変わる（L5 は緑、以降 `ALIEN_SKINS` の順に L10, L15, …）
 
 ## 記録
 
@@ -206,7 +207,7 @@ function analyze(kana) {
 ### 保存（localStorage）
 
 - `juni.records` — `{ [level]: { level, time, maxCombo, destroyed, required, rows, dirs, t } }`。レベルごとのベストタイムと、そのときの統計（ok/ng）。開始レベルの解放判定にも使う
-- `juni.settings` — `{ guide, hint, sfx, bgm, startLevel, secretBest }`（`secretBest` は隠しステージのベスト友好度。未プレイなら無い）
+- `juni.settings` — `{ guide, hint, sfx, bgm, startLevel, secretBests }`（`secretBests` は `{ [レベル]: ベスト友好度 }`。未プレイのレベルは無い）
 - 旧キー `juni.best` / `juni.highscore` / `juni.history` は読まない
 
 ## 音

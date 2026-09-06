@@ -1108,7 +1108,8 @@ const PALETTE = {
   UFO_DOME: "rgba(79, 240, 230, 0.3)",
   UFO_DOME_EDGE: "rgba(230, 255, 253, 0.8)",
   UFO_LIGHTS: ["#ffd93d", "#ff6fb5", "#4ff0e6"],
-  ALIEN_SKIN: "#7dffb0",
+  /* 宇宙人の肌。隠しステージに入ったレベル(SECRET_EVERY の倍数)ごとに変わる: L5, L10, L15, … の順。末尾の次は先頭に戻る */
+  ALIEN_SKINS: ["#7dffb0", "#ffb3e6", "#8ad0ff", "#ffc36b", "#c9a4ff", "#fff27a"],
   ALIEN_EYE: "#1b1252",
   ALIEN_EYE_SHINE: "#ffffff",
   ALIEN_STAR: "#ffd93d",
@@ -2357,12 +2358,24 @@ const BGM = (() => {
    設定: 入力ガイド / ヒント / 効果音 / BGM / 開始レベル(localStorageに保存)
    ============================================================ */
 const SETTINGS_KEY = "juni.settings";
-const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1 };
+const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1, secretBests: {} };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
 } catch {}
-delete settings.easy;     // 旧バージョンの設定は捨てる
+delete settings.easy;       // 旧バージョンの設定は捨てる
 delete settings.practice;
+delete settings.secretBest; // 旧形式(レベルを持たない隠しステージのベスト)は捨てる
+settings.secretBests = cleanSecretBests(settings.secretBests);
+
+/* 隠しステージのベスト友好度 { [レベル]: % } を型どおりに揃える(壊れた値や旧形式は捨てる) */
+function cleanSecretBests(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [lv, pct] of Object.entries(raw)) {
+    if (/^[1-9]\d*$/.test(lv) && Number.isFinite(pct)) out[lv] = Math.max(0, Math.min(100, pct));
+  }
+  return out;
+}
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
   markLocalChange();
@@ -2627,9 +2640,13 @@ const Cloud = (() => {
     }
     const cloudNewer = (cloud.updatedAt ?? 0) > local.updatedAt;
     const merged = cloudNewer ? { ...local.settings, ...cloud.settings } : { ...local.settings };
-    /* 隠しステージのベスト友好度は記録と同じ扱い: 新しいほうではなく高いほう */
-    const bests = [local.settings.secretBest, cloud.settings?.secretBest].filter(Number.isFinite);
-    if (bests.length) merged.secretBest = Math.max(...bests);
+    /* 隠しステージのベスト友好度は記録と同じ扱い: 新しいほうではなく、レベルごとに高いほう */
+    const bests = cleanSecretBests(local.settings.secretBests);
+    for (const [lv, pct] of Object.entries(cleanSecretBests(cloud.settings?.secretBests))) {
+      bests[lv] = Math.max(bests[lv] ?? 0, pct);
+    }
+    merged.secretBests = bests;
+    delete merged.secretBest; // 旧形式が別端末から来ても復活させない
     return {
       records,
       settings: merged,
@@ -2984,7 +3001,7 @@ function finishSecret() {
   hudTimeEl.classList.remove("warn");
   BGM.stop();
   const pct = secretPct();
-  const prevBest = Number.isFinite(settings.secretBest) ? settings.secretBest : null;
+  const prevBest = settings.secretBests[game.level] ?? null;
   const rec = {
     level: game.level, pct,
     maxCombo: game.maxCombo,
@@ -2997,7 +3014,7 @@ function finishSecret() {
   SFX.clear();
   const isNewBest = prevBest === null || pct > prevBest;
   if (isNewBest) {
-    settings.secretBest = pct;
+    settings.secretBests[game.level] = pct;
     saveSettings();
     spawnConfetti(CONFIG.CONFETTI);
     SFX.newRecord();
@@ -3211,13 +3228,14 @@ function openRecords() {
     b.dataset.level = lv;
     b.innerHTML = `<span class="rec-lv">LEVEL ${lv}</span><span class="rec-time">${fmtTime(r.time)}</span><span class="rec-rank">${buildPixelSvg([rankFor(r.time)], "currentColor")}</span>`;
     recordsListEl.appendChild(b);
-  }
-  /* 隠しステージのベスト友好度(押しても何も出ない) */
-  if (Number.isFinite(settings.secretBest)) {
-    const d = document.createElement("div");
-    d.className = "rec rec-secret";
-    d.innerHTML = `<span class="rec-lv">？？？</span><span class="rec-time">友好度 ${settings.secretBest}%</span><span class="rec-rank"></span>`;
-    recordsListEl.appendChild(d);
+    /* そのレベルから入った隠しステージのベスト友好度は、レベルの直後に(押しても何も出ない) */
+    const best = settings.secretBests[lv];
+    if (best !== undefined) {
+      const d = document.createElement("div");
+      d.className = "rec rec-secret";
+      d.innerHTML = `<span class="rec-lv">？？？</span><span class="rec-time">友好度 ${best}%</span><span class="rec-rank"></span>`;
+      recordsListEl.appendChild(d);
+    }
   }
   recordsEl.classList.remove("hidden");
 }
@@ -3690,6 +3708,12 @@ function drawEarth() {
 const ufoX = () => fieldW / 2 + Math.sin((lastTime / 1000) * CONFIG.UFO_SWAY_SPEED) * CONFIG.UFO_SWAY;
 const ufoY = () => CONFIG.UFO_Y + Math.sin((lastTime / 1000) * 1.7) * 3;
 
+/* 宇宙人の肌の色: 入ったレベルで決まる(L5 が先頭、以降 SECRET_EVERY ごとに次の色) */
+function alienSkin(level) {
+  const i = Math.max(0, Math.round(level / CONFIG.SECRET_EVERY) - 1);
+  return PALETTE.ALIEN_SKINS[i % PALETTE.ALIEN_SKINS.length];
+}
+
 /* 宇宙人の機嫌(0〜3): 友好度が SECRET_FACE_STEPS を超えるごとに1段上がる */
 function alienMood() {
   const pct = secretPct();
@@ -3716,8 +3740,8 @@ function drawSparkle(x, y, r) {
 function drawAlien(cx, cy, r, mood, now) {
   ctx.save();
   ctx.translate(cx, cy + Math.sin(now * 3) * 1.5);
-  ctx.fillStyle = PALETTE.ALIEN_SKIN;
-  ctx.strokeStyle = PALETTE.ALIEN_SKIN;
+  ctx.fillStyle = alienSkin(game.level);
+  ctx.strokeStyle = alienSkin(game.level);
   ctx.lineWidth = 2;
   /* 触角 */
   for (const s of [-1, 1]) {

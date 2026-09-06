@@ -881,7 +881,7 @@ i.down { color: var(--danger); }
   </div>
 </div>
 
-<!-- 隠しステージの説明: リザルトの「?」→ ここ → 「はじめる」で startSecret() -->
+<!-- 隠しステージの説明: リザルトの「?」→ ここ → 「スタート」で startSecret() -->
 <div id="secret-intro" class="modal hidden">
   <div class="panel">
     <div class="go-title secret-title" id="secret-intro-title"></div>
@@ -891,9 +891,8 @@ i.down { color: var(--danger); }
       <li>UFO から降ってくる「ふきだし」のことばを、フリックで打ち返す</li>
       <li>1語 打ち返すごとに友好度が上がり、宇宙人がよろこぶ</li>
       <li>落としても減点なし。友好度 100% か 60秒で終了</li>
-      <li>ベスト友好度は記録に残る</li>
     </ul>
-    <button id="secret-start" class="primary">はじめる</button>
+    <button id="secret-start" class="primary">スタート</button>
     <button id="secret-title-btn" class="ghost">タイトルへ</button>
   </div>
 </div>
@@ -3007,7 +3006,7 @@ document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
   startLevel(game.level);
 });
-/* 「?」→ 説明パネル → 「はじめる」で、いまクリアしたレベルの語彙のまま隠しステージへ */
+/* 「?」→ 説明パネル → 「スタート」で、いまクリアしたレベルの語彙のまま隠しステージへ */
 const secretIntroEl = document.getElementById("secret-intro");
 document.getElementById("go-secret").addEventListener("click", () => {
   SFX.ensure();

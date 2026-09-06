@@ -562,6 +562,21 @@ i.down { color: var(--danger); }
   letter-spacing: 0.1em;
 }
 
+/* ---- 利用規約・プライバシーポリシーへのリンク(タイトル画面の最下部。別ページ terms.html / privacy.html) ---- */
+.legal {
+  margin: 14px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+}
+.legal a, .cloud-lead a {
+  color: var(--dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.legal a:active, .cloud-lead a:active { color: var(--ember); }
+.legal .sep { margin: 0 6px; opacity: 0.6; }
+
 /* 引っ越しの案内(旧配信先で出す)と、引き継ぎ完了の知らせ(新ドメインで出す) */
 .migrate {
   margin-top: 10px;
@@ -871,7 +886,7 @@ i.down { color: var(--danger); }
     <div id="cloud" class="cloud hidden">
       <div id="cloud-guest" class="cloud-guest">
         <button id="cloud-login" class="outline-btn cloud-login">☁&#xFE0E; Googleでログインする</button>
-        <p class="cloud-lead">記録と設定を保存して、別の端末でも引き継げます</p>
+        <p class="cloud-lead">記録と設定を保存して、別の端末でも引き継げます<br>ログインすると<a href="terms.html">利用規約</a>と<a href="privacy.html">プライバシーポリシー</a>に同意したものとみなします</p>
       </div>
       <div id="cloud-user" class="cloud-user hidden">
         <span>☁&#xFE0E; <b id="cloud-name"></b></span>
@@ -879,6 +894,7 @@ i.down { color: var(--danger); }
       </div>
       <span id="cloud-status" class="cloud-status"></span>
     </div>
+    <p class="legal"><a href="terms.html">利用規約</a><span class="sep">·</span><a href="privacy.html">プライバシーポリシー</a></p>
   </div>
 </div>
 

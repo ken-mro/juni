@@ -8,10 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 絶対に守る制約
 
-- **単一HTMLファイル**。CSS/JSすべてインライン。外部依存ゼロ（CDN・npm・ビルドツール・音源ファイル不可。音はWeb Audio APIで合成、共有画像も canvas で描く）
+- **単一HTMLファイル**。CSS/JSすべてインライン。外部依存ゼロ（CDN・npm・ビルドツール・音源ファイル不可。音はWeb Audio APIで合成、共有画像も canvas で描く）。例外は利用規約 `terms.html` とプライバシーポリシー `privacy.html`（ゲームとは別の静的ページ。CSS はそれぞれにインラインで、`:root` の色は `index.html` と揃える。取得する情報や Cookie の記述は実装と一致させる — ログイン・保存データ・Cookie を変えたら文書も直す）
 - 入力は **Pointer Events で統一**（`touchstart` 禁止）。マウスでも同じコードパスが通る
 - 調整用の数値はファイル先頭に集約: レイアウト系・DOMの色は CSS `:root` のカスタムプロパティ、ゲームプレイ系は `<script>` 先頭の `CONFIG`、canvas の描画色は `PALETTE`。関数内にマジックナンバー・色コードを埋めない
-- 配信先は Cloudflare Workers（`flick-impact.com`）。静的アセットとして `index.html` を配信し、`/auth/*` `/api/*` だけ Worker が処理する。`index.html` はバックエンド無し（GitHub Pages など）でも壊れない（`/api/me` が JSON を返さなければクラウド同期の UI を出さない）
+- 配信先は Cloudflare Workers（`flick-impact.com`）。静的アセットとして `index.html`（と `terms.html` / `privacy.html`）を配信し、`/auth/*` `/api/*` だけ Worker が処理する。`index.html` はバックエンド無し（GitHub Pages など）でも壊れない（`/api/me` が JSON を返さなければクラウド同期の UI を出さない）
 - **Google ログインは Worker 側で完結させる**（Authorization Code + PKCE）。HTML に Google のスクリプトを読み込まない。取得するのは表示名だけ（スコープ `openid profile`）
 - Worker も外部依存ゼロ（npm パッケージ不使用・ES module 一本）。調整値は `worker/index.js` 先頭の `SETTINGS`、秘密情報は `wrangler secret`（`GOOGLE_CLIENT_SECRET` / `SESSION_SECRET`）。ファイルに秘密を書かない
 - `localStorage` は使用可

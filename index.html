@@ -1029,7 +1029,7 @@ const CONFIG = {
      UFO の宇宙人が降らせる「ふきだし」を打ち返して友好度(撃破数 / 規定数)を上げる。着地の減点は無い */
   SECRET_EVERY: 5,
   SECRET_SPEED: 1.0,        // ふきだしの落下速度(そのレベルの隕石に対する係数。1.0 = 同じ)
-  SECRET_BPM: 108,          // 隠しステージの BGM(専用曲)のテンポ。レベル・ラストスパートで変えない
+  SECRET_BPM: 150,          // 隠しステージの BGM(専用曲)のテンポ。レベル・ラストスパートで変えない
   SECRET_FACE_STEPS: [34, 67, 100], // 宇宙人の表情が変わる友好度(%)。未満は無表情 → にっこり → 大喜び → 100% で目が星
   UFO_Y: 44,                // UFO の中心の高さ(px。フィールド上端から)
   UFO_W: 92,                // UFO の円盤の幅(px)
@@ -2015,48 +2015,49 @@ const BGM = (() => {
   ];
   const BASS_OCT = [0, 0, 12, 0, 0, 12, 0, 12]; // ベース: 8分ごとのオクターブ跳躍
 
-  /* --- 隠しステージ「ファーストコンタクト」の曲: メジャーセブンスで浮遊感のある 8小節を2周。
-     Cmaj7 | Em7 | Fmaj7 | G | Am7 | Em7 | Fmaj7 | G6  4声のアルペジオ用に tones は4音 --- */
+  /* --- 隠しステージ「ファーストコンタクト」の曲: 宇宙人と一緒に踊るような、明るく跳ねる 8小節を2周。
+     C | F | C | G | Am | F | G | C --- */
   const SECRET_CHORDS = [
-    { bass: 36, tones: [60, 64, 67, 71] }, // Cmaj7
-    { bass: 40, tones: [59, 62, 64, 67] }, // Em7
-    { bass: 41, tones: [60, 64, 65, 69] }, // Fmaj7
-    { bass: 43, tones: [59, 62, 67, 71] }, // G
-    { bass: 45, tones: [60, 64, 67, 69] }, // Am7
-    { bass: 40, tones: [59, 62, 64, 67] }, // Em7
-    { bass: 41, tones: [60, 64, 65, 69] }, // Fmaj7
-    { bass: 43, tones: [59, 62, 64, 67] }, // G6
+    { bass: 36, tones: [60, 64, 67] }, // C
+    { bass: 41, tones: [60, 65, 69] }, // F
+    { bass: 36, tones: [60, 64, 67] }, // C
+    { bass: 43, tones: [59, 62, 67] }, // G
+    { bass: 45, tones: [60, 64, 69] }, // Am
+    { bass: 41, tones: [60, 65, 69] }, // F
+    { bass: 43, tones: [59, 62, 67] }, // G
+    { bass: 36, tones: [60, 64, 67] }, // C
   ];
-  /* リード: ゆったり(4分音符が中心)で、問いかけて返事を待つように休符を残す */
+  /* リード: 8分で跳ね回り、フレーズの終わりに「ハロー？」と呼びかけるような上昇形を置く */
   const SECRET_MELODY = [
-    [79, "-", 76, "-", 74, 76, "-", "-"],
-    [71, "-", "-", "-", 74, "-", 76, "-"],
-    [81, "-", 79, "-", 76, "-", "-", "-"],
-    [74, "-", 76, "-", 79, "-", "-", null],
-    [84, "-", 81, "-", 79, "-", 76, "-"],
-    [79, "-", "-", "-", 74, "-", "-", "-"],
-    [76, "-", 77, "-", 81, "-", 79, "-"],
-    [79, "-", "-", "-", "-", "-", null, null],
-    [72, "-", 76, "-", 79, "-", 84, "-"],
-    [83, "-", 79, "-", "-", "-", 74, "-"],
-    [77, "-", 81, "-", 84, "-", 81, "-"],
-    [79, "-", "-", "-", 76, "-", 74, "-"],
-    [72, "-", 74, "-", 76, "-", 79, "-"],
-    [83, "-", "-", "-", 79, "-", 76, "-"],
-    [81, "-", 79, "-", 77, "-", 76, "-"],
-    [74, "-", 72, "-", "-", "-", null, null],
+    [72, 76, 79, "-", 84, "-", 79, 76],
+    [77, "-", 81, 77, 84, "-", 81, "-"],
+    [79, 76, 72, "-", 76, 79, 84, "-"],
+    [83, 79, 74, "-", 79, "-", null, null],
+    [81, "-", 84, 81, 88, "-", 84, 81],
+    [77, 81, 84, "-", 81, "-", 77, "-"],
+    [79, 83, 86, "-", 83, 79, 74, 76],
+    [72, "-", "-", null, 79, 84, null, null],
+    [84, "-", 79, 84, 76, "-", 79, "-"],
+    [81, 77, 81, "-", 84, 81, 77, "-"],
+    [76, 79, 84, "-", 86, 84, 79, "-"],
+    [83, "-", 79, 83, 86, "-", null, null],
+    [88, "-", 84, "-", 81, 84, 88, "-"],
+    [89, "-", 84, 81, 77, "-", 81, "-"],
+    [86, 83, 79, 83, 86, "-", 91, "-"],
+    [84, "-", "-", null, 79, 84, 88, "-"],
   ];
-  /* 曲とアレンジ。chip = 通常のチップチューン、dream = 隠しステージ(三角波の柔らかいリード+
-     8分のアルペジオ+2分音符のベース、打楽器なし、残響多め) */
+  const SECRET_BASS = [0, 12, 7, 12, 0, 12, 7, 12]; // ベース: 根音・オクターブ・5度を跳ね回る
+  /* 曲とアレンジ。chip = 通常のチップチューン、bounce = 隠しステージ(裏拍のコード刻み+
+     跳ねるベース+軽いドラム、リードにビブラート) */
   const SONGS = {
     main: { chords: CHORDS, melody: MELODY, style: "chip" },
-    secret: { chords: SECRET_CHORDS, melody: SECRET_MELODY, style: "dream" },
+    secret: { chords: SECRET_CHORDS, melody: SECRET_MELODY, style: "bounce" },
   };
   const song = () => (game.secret ? SONGS.secret : SONGS.main);
   /* アレンジごとの音作り(残響の量・リードの丸め方・リードのビブラート) */
   const STYLE = {
-    chip: { wet: 0.35, feedback: 0.28, leadLp: 5200, vibrato: 0 },
-    dream: { wet: 0.55, feedback: 0.42, leadLp: 3200, vibrato: 0.006 }, // vibrato は周波数比
+    chip: { wet: 0.35, feedback: 0.28, leadLp: 5200, vibrato: 0, vibratoHz: 0 },
+    bounce: { wet: 0.3, feedback: 0.25, leadLp: 6000, vibrato: 0.004, vibratoHz: 6.5 }, // vibrato は周波数比
   };
   const PULSE_DUTY = 0.25;  // リードのパルス幅(25% = 定番のチップ音)
   const LOOKAHEAD = 1.2;    // 何秒先まで発音を予約するか
@@ -2191,30 +2192,24 @@ const BGM = (() => {
   }
 
   /* リード: 25%パルス波。素早く立ち上がり、少し減衰して保持する。
-     soft(隠しステージ)は三角波でゆっくり立ち上がり、軽いビブラートが掛かる */
-  function leadNote(t, freq, dur, soft = false) {
+     アレンジにビブラートがあれば LFO で周波数を揺らす(隠しステージの陽気な歌い回し) */
+  function leadNote(t, freq, dur) {
     const osc = ac.createOscillator();
-    if (soft) osc.type = "triangle";
-    else osc.setPeriodicWave(pulseWave);
+    osc.setPeriodicWave(pulseWave);
     osc.frequency.value = freq;
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    if (soft) {
-      g.gain.exponentialRampToValueAtTime(0.2, t + 0.04);
-      g.gain.setValueAtTime(0.2, t + Math.max(dur - 0.08, 0.1));
-    } else {
-      g.gain.exponentialRampToValueAtTime(0.16, t + 0.006);
-      g.gain.exponentialRampToValueAtTime(0.1, t + 0.07);
-      g.gain.setValueAtTime(0.1, t + Math.max(dur - 0.03, 0.08));
-    }
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.1, t + 0.07);
+    g.gain.setValueAtTime(0.1, t + Math.max(dur - 0.03, 0.08));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(g).connect(leadOut);
-    const vib = STYLE[song().style].vibrato;
-    if (vib > 0) {
+    const { vibrato, vibratoHz } = STYLE[song().style];
+    if (vibrato > 0) {
       const lfo = ac.createOscillator();
-      lfo.frequency.value = 5.5;
+      lfo.frequency.value = vibratoHz;
       const depth = ac.createGain();
-      depth.gain.value = freq * vib;
+      depth.gain.value = freq * vibrato;
       lfo.connect(depth).connect(osc.frequency);
       lfo.start(t);
       lfo.stop(t + dur + 0.02);
@@ -2227,7 +2222,7 @@ const BGM = (() => {
   function scheduleBar(t0) {
     const { spb, drive } = mood();
     const s = song();
-    const dream = s.style === "dream";
+    const bounce = s.style === "bounce";
     const e8 = spb / 2;  // 8分音符の長さ(秒)
     const e16 = spb / 4; // 16分音符の長さ(秒)
     const chord = s.chords[barIdx % s.chords.length];
@@ -2244,23 +2239,32 @@ const BGM = (() => {
       if (typeof n !== "number") continue;
       let len = 1;
       while (i + len < 8 && mel[i + len] === "-") len++;
-      leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02, dream);
+      leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02);
     }
 
     const lp = ac.createBiquadFilter();
     lp.type = "lowpass";
     lp.connect(bus);
 
-    if (dream) {
-      /* 隠しステージ: 三角波の鈴のような 8分アルペジオ、2分音符の静かなベース、
-         打楽器は拍裏のかすかな空気音だけ(宇宙人との対話を邪魔しない) */
-      lp.frequency.value = 1800;
-      for (let i = 0; i < 8; i++) {
-        chordNote(t0 + i * e8, midiHz(chord.tones[i % chord.tones.length]), e8 * 0.9, lp, "triangle", 0.07);
+    if (bounce) {
+      /* 隠しステージ: 裏拍(8分の裏)で和音を短く刻むスカ風の跳ね、根音・オクターブ・5度を
+         飛び回るベース、軽いキック・スネアと8分ハット。折り返しでスネアの助走 */
+      lp.frequency.value = 3200;
+      for (let i = 1; i < 8; i += 2) {
+        for (const tone of chord.tones) chordNote(t0 + i * e8, midiHz(tone), e8 * 0.45, lp, "square", 0.022);
       }
-      bassNote(t0, midiHz(chord.bass), spb * 2 * 0.95);
-      bassNote(t0 + spb * 2, midiHz(chord.bass), spb * 2 * 0.95);
-      for (let b = 0; b < 4; b++) noiseHit(t0 + b * spb + spb * 0.5, 0.018, 9000, 0.06, "highpass");
+      for (let i = 0; i < 8; i++) bassNote(t0 + i * e8, midiHz(chord.bass + SECRET_BASS[i]), e8 * 0.8);
+      for (let b = 0; b < 4; b++) {
+        const t = t0 + b * spb;
+        kick(t, b % 2 === 0 ? 0.32 : 0.18);
+        if (b % 2 === 1) noiseHit(t, 0.07, 1800, 0.1, "bandpass");     // スネア
+        noiseHit(t, 0.03, 7000, 0.03, "highpass");                     // ハット(表)
+        noiseHit(t + spb * 0.5, 0.045, 7000, 0.04, "highpass");        // ハット(裏。少し強く)
+      }
+      if (isTurn) {
+        noiseHit(t0 + spb * 3.5, 0.06, 1800, 0.1, "bandpass");
+        noiseHit(t0 + spb * 3.75, 0.08, 1800, 0.1, "bandpass");
+      }
       return spb * 4;
     }
 

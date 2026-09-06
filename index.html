@@ -515,25 +515,14 @@ i.down { color: var(--danger); }
   color: var(--dim);
 }
 .cloud.hidden { display: none; }
-.cloud .linklike { margin-top: 0; }
 .cloud-guest.hidden { display: none; }
-/* ログイン導線: 押せることが一目で分かるよう、枠と塗りのあるボタンにする */
-.cloud-login {
+/* ログイン導線: 横幅いっぱいの枠付きボタン(.outline-btn の既定値より優先させる) */
+.outline-btn.cloud-login {
   display: block;
   width: 100%;
   padding: 11px 0;
-  border: 1px solid var(--key-edge);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
-  color: var(--text);
-  font-family: var(--font-ui);
   font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  cursor: pointer;
 }
-.cloud-login:active { background: rgba(255, 255, 255, 0.18); }
 .cloud-lead {
   margin: 6px 0 0;
   font-size: 11px;
@@ -547,20 +536,12 @@ i.down { color: var(--danger); }
   flex-wrap: wrap;
 }
 .cloud-user.hidden { display: none; }
-/* ログアウト: 名前の横に置く小さな枠付きボタン(押せることが分かるように) */
-.cloud-logout {
+/* ログアウト: 名前の横に置く小さなピル型ボタン(.outline-btn の既定値より優先させる) */
+.outline-btn.cloud-logout {
   padding: 6px 12px;
-  border: 1px solid var(--key-edge);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  font-family: var(--font-ui);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  cursor: pointer;
 }
-.cloud-logout:active { background: rgba(255, 255, 255, 0.18); }
 .cloud-user b {
   display: inline-block;
   max-width: 11em;
@@ -677,20 +658,29 @@ i.down { color: var(--danger); }
   cursor: pointer;
 }
 .ghost.hidden { display: none; }
-/* 三次的な操作(設定・記録)は控えめなリンク風にする */
-.linklike {
-  margin-top: 12px;
-  background: none;
-  border: none;
-  color: var(--dim);
+/* 枠と塗りのある副ボタン(記録・設定・ログイン・ログアウト)。押せることが一目で分かるようにする */
+.outline-btn {
+  border: 1px solid var(--key-edge);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+  color: var(--text);
   font-family: var(--font-ui);
-  font-size: 12px;
-  letter-spacing: 0.15em;
-  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
-.linklike:disabled { opacity: 0.4; cursor: default; }
-.linklike.hidden { display: none; }
+.outline-btn:active { background: rgba(255, 255, 255, 0.18); }
+.outline-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+/* スタートの下: 記録・設定を横に2つ並べる */
+.start-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+.start-actions .outline-btn { padding: 10px 0; }
 #btn-start { margin-top: 14px; } /* レベル選択の直下に置く */
 
 /* ---- 設定・一時停止ボタン(フィールド右下) ---- */
@@ -842,8 +832,10 @@ i.down { color: var(--danger); }
     <p id="level-desc" class="lv-desc"></p>
     <p class="best-line">最高クリア <b id="start-best">—</b></p>
     <button id="btn-start" class="primary">スタート</button>
-    <button id="btn-records" class="linklike">🏆&#xFE0E; 記録を見る</button>
-    <button id="btn-start-settings" class="linklike">⚙&#xFE0E; 設定</button>
+    <div class="start-actions">
+      <button id="btn-records" class="outline-btn">🏆&#xFE0E; 記録を見る</button>
+      <button id="btn-start-settings" class="outline-btn">⚙&#xFE0E; 設定</button>
+    </div>
     <!-- 引っ越し(旧配信先でだけ出す) / 引き継ぎ完了の知らせ。中身は Migrate が入れる -->
     <div id="migrate" class="migrate hidden">
       <p id="migrate-lead" class="migrate-lead"></p>
@@ -854,12 +846,12 @@ i.down { color: var(--danger); }
          バックエンド(/api)が無い配信先(GitHub Pages など)では非表示のまま -->
     <div id="cloud" class="cloud hidden">
       <div id="cloud-guest" class="cloud-guest">
-        <button id="cloud-login" class="cloud-login">☁&#xFE0E; Googleでログインする</button>
+        <button id="cloud-login" class="outline-btn cloud-login">☁&#xFE0E; Googleでログインする</button>
         <p class="cloud-lead">記録と設定を保存して、別の端末でも引き継げます</p>
       </div>
       <div id="cloud-user" class="cloud-user hidden">
         <span>☁&#xFE0E; <b id="cloud-name"></b></span>
-        <button id="cloud-logout" class="cloud-logout">ログアウト</button>
+        <button id="cloud-logout" class="outline-btn cloud-logout">ログアウト</button>
       </div>
       <span id="cloud-status" class="cloud-status"></span>
     </div>

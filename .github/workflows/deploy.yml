@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - index.html
+      - terms.html
+      - privacy.html
       - worker/**
       - wrangler.toml
       - .github/workflows/deploy.yml

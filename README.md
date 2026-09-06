@@ -11,8 +11,9 @@
 | パス | 役割 |
 | --- | --- |
 | `index.html` | ゲーム本体。バックエンドが無い配信先（GitHub Pages など）でもそのまま動く（ログイン欄が出ないだけ） |
+| `terms.html` / `privacy.html` | 利用規約・プライバシーポリシー（単独の静的ページ。タイトル画面の最下部とログイン導線からリンク） |
 | `worker/index.js` | Cloudflare Worker。`index.html` の配信、Google ログイン（`/auth/*`）、プレイデータ API（`/api/*`） |
-| `worker/build.mjs` | 配信ファイル（`index.html` のみ）を `dist/` に集める。wrangler が dev / deploy の前に自動実行 |
+| `worker/build.mjs` | 配信ファイル（`index.html` と `terms.html` / `privacy.html`）を `dist/` に集める。wrangler が dev / deploy の前に自動実行 |
 | `wrangler.toml` | Worker の設定（独自ドメイン・KV・環境変数） |
 | `.github/workflows/deploy.yml` | `main` に push すると Cloudflare へデプロイ |
 

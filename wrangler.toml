@@ -24,7 +24,7 @@ binding = "ASSETS"
 run_worker_first = true
 
 [vars]
-GOOGLE_CLIENT_ID = "REPLACE_WITH_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "37884375037-1m4booa49j2upt3cfgpqonms8j2kdd5o.apps.googleusercontent.com"
 CANONICAL_HOST = "flick-impact.com"
 
 # プレイデータの保存先。`npx wrangler kv namespace create PLAYDATA` で作った id を貼る

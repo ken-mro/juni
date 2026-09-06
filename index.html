@@ -543,10 +543,24 @@ i.down { color: var(--danger); }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .cloud-user.hidden { display: none; }
+/* ログアウト: 名前の横に置く小さな枠付きボタン(押せることが分かるように) */
+.cloud-logout {
+  padding: 6px 12px;
+  border: 1px solid var(--key-edge);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+.cloud-logout:active { background: rgba(255, 255, 255, 0.18); }
 .cloud-user b {
   display: inline-block;
   max-width: 11em;
@@ -845,7 +859,7 @@ i.down { color: var(--danger); }
       </div>
       <div id="cloud-user" class="cloud-user hidden">
         <span>☁&#xFE0E; <b id="cloud-name"></b></span>
-        <button id="cloud-logout" class="linklike">ログアウト</button>
+        <button id="cloud-logout" class="cloud-logout">ログアウト</button>
       </div>
       <span id="cloud-status" class="cloud-status"></span>
     </div>

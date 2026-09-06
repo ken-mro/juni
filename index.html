@@ -26,6 +26,8 @@
   --logo-hud-h-narrow: 22px;  /* 狭い端末でのHUDロゴの高さ */
   --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
   --pixel-heading-h: 30px;    /* リザルト見出し(CLEAR! / TIME UP)のドット文字の高さ */
+  --pixel-countdown-h: 40px;  /* スタート直後の READY / GO! のドット文字の高さ */
+  --countdown-fade: 0.45s;    /* ゲームが動き出してから GO! が消えるまでの時間 */
   --pixel-rank-h: 22px;       /* ランク文字(S/A/B/C)のドット文字の高さ */
   --pixel-rank-label-h: 11px; /* 「RANK」のドット文字の高さ */
   --pixel-rec-rank-h: 15px;   /* 記録一覧のランク文字の高さ */
@@ -168,6 +170,31 @@ html, body {
   width: 100%;
   height: 100%;
   display: block;
+}
+/* スタート直後の READY → GO!(フィールド中央のドット文字。中身は showCountdown() が入れる) */
+#countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+#countdown.hidden { display: none; }
+#countdown .pixel {
+  height: var(--pixel-countdown-h);
+  animation: countdown-pop 0.24s steps(3, end) both; /* コマ送りで飛び出す(レトロ調) */
+}
+/* GO! はゲームが動き出したあと、拡大しながら消える */
+#countdown.out .pixel { animation: countdown-out var(--countdown-fade) steps(4, end) both; }
+@keyframes countdown-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+@keyframes countdown-out {
+  from { transform: scale(1); opacity: 1; }
+  to   { transform: scale(1.7); opacity: 0; }
 }
 
 /* ---- キーパッド (DOM) ---- */
@@ -489,6 +516,29 @@ i.down { color: var(--danger); }
 }
 .cloud.hidden { display: none; }
 .cloud .linklike { margin-top: 0; }
+.cloud-guest.hidden { display: none; }
+/* ログイン導線: 押せることが一目で分かるよう、枠と塗りのあるボタンにする */
+.cloud-login {
+  display: block;
+  width: 100%;
+  padding: 11px 0;
+  border: 1px solid var(--key-edge);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+.cloud-login:active { background: rgba(255, 255, 255, 0.18); }
+.cloud-lead {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--dim);
+}
 .cloud-user {
   display: flex;
   align-items: center;
@@ -732,6 +782,7 @@ i.down { color: var(--danger); }
   </header>
   <div id="field">
     <canvas id="cv"></canvas>
+    <div id="countdown" class="hidden"></div>
     <div id="chip"></div>
     <button id="btn-pause" aria-label="一時停止"><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.2" y="1.5" width="3.4" height="11" rx="1.4" fill="currentColor"/><rect x="8.4" y="1.5" width="3.4" height="11" rx="1.4" fill="currentColor"/></svg></button>
     <button id="btn-settings" aria-label="設定">⚙&#xFE0E;</button>
@@ -788,7 +839,10 @@ i.down { color: var(--danger); }
     <!-- クラウド同期(任意): Googleでログインすると記録・設定を保存し、別の端末でも引き継げる。
          バックエンド(/api)が無い配信先(GitHub Pages など)では非表示のまま -->
     <div id="cloud" class="cloud hidden">
-      <button id="cloud-login" class="linklike">Googleでログインして記録を引き継ぐ</button>
+      <div id="cloud-guest" class="cloud-guest">
+        <button id="cloud-login" class="cloud-login">☁&#xFE0E; Googleでログインする</button>
+        <p class="cloud-lead">記録と設定を保存して、別の端末でも引き継げます</p>
+      </div>
       <div id="cloud-user" class="cloud-user hidden">
         <span>☁&#xFE0E; <b id="cloud-name"></b></span>
         <button id="cloud-logout" class="linklike">ログアウト</button>
@@ -859,6 +913,8 @@ const CONFIG = {
 
   /* 1プレイ = 1レベル。60秒以内に規定数を撃破すればクリア */
   TIME_LIMIT: 60,       // 制限時間(秒)
+  READY_TIME: 1.0,      // スタート直後に READY を出す秒数(この間は隕石を出さず入力も受けない)
+  GO_TIME: 0.5,         // GO! を出してから隕石が動き出すまでの秒数(以後 GO! は消えながら残る)
   LAST_SPURT: 10,       // 残りこの秒数からラストスパート演出(タイマー赤・秒カウント音・BGM加速)
   CLEAR_RATIO: 0.8,     // 規定撃破数 = 1分間の出現予定数(60秒÷出現間隔) × この係数
 
@@ -1007,6 +1063,8 @@ const LOGO = {
 const PIXEL_HEADINGS = {
   CLEAR: { text: "CLEAR!", fill: ["--ember", "--pink"] },
   FAIL: { text: "TIME UP", fill: ["--dim"] },
+  READY: { text: "READY", fill: ["--cyan", "--ember"] },
+  GO: { text: "GO!", fill: ["--ember", "--pink"] },
   RANK_LABEL: "RANK",
 };
 /* 太字のドットフォント(高さ7・2ドット幅の線)。幅は文字ごと(行文字列の長さ)。英大文字・数字・記号 */
@@ -1805,6 +1863,9 @@ const SFX = (() => {
     },
     /* ラストスパートの秒カウント */
     timeTick() { tone(1320, 0.05, { type: "triangle", vol: 0.16 }); },
+    /* スタート直後: READY は短い1音、GO! は駆け上がる2音 */
+    ready() { tone(660, 0.1, { type: "square", vol: 0.14 }); },
+    go() { melody([84, 91], 0.07, 0.24, { type: "square", vol: 0.16 }); },
     /* クリア: 上昇して終わる明るいファンファーレ */
     clear() {
       melody([67, 72, 76, 79], 0.12, 0.3, { type: "triangle", vol: 0.28, delay: 0.15 });
@@ -2322,13 +2383,14 @@ const Cloud = (() => {
 
   const rootEl = document.getElementById("cloud");
   const loginEl = document.getElementById("cloud-login");
+  const guestEl = document.getElementById("cloud-guest");
   const userEl = document.getElementById("cloud-user");
   const nameEl = document.getElementById("cloud-name");
   const statusEl = document.getElementById("cloud-status");
 
   function render() {
     rootEl.classList.toggle("hidden", !available);
-    loginEl.classList.toggle("hidden", !!user);
+    guestEl.classList.toggle("hidden", !!user);
     userEl.classList.toggle("hidden", !user);
     if (user) nameEl.textContent = user.name || "Google アカウント";
     statusEl.textContent = status;
@@ -2696,7 +2758,36 @@ function finishGame(cleared) {
   showResult(rec, "clear", { prev, isNewBest, best: isNewBest ? rec : prev });
 }
 
-/* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理) */
+/* ---- スタート直後の READY → GO!: フィールド中央にドット文字を出し、終わってからゲームを動かす ---- */
+const countdownEl = document.getElementById("countdown");
+let countdown = null; // 進行中のみ { t: 経過秒, phase: "READY" | "GO" }
+
+function showCountdown(phase) {
+  countdown.phase = phase;
+  const head = PIXEL_HEADINGS[phase];
+  countdownEl.innerHTML = buildPixelSvg([head.text], head.fill);
+  countdownEl.classList.remove("hidden", "out");
+  phase === "READY" ? SFX.ready() : SFX.go();
+}
+/* GO! の表示が終わったら実際に動かし始める(BGM もここから) */
+function beginPlay() {
+  countdown = null;
+  game.started = true;
+  countdownEl.classList.add("out"); // GO! はゲームの上で消えていく
+  if (settings.bgm) BGM.start(); // AudioContext はスタート操作で起動済み
+}
+countdownEl.addEventListener("animationend", () => {
+  if (countdownEl.classList.contains("out")) countdownEl.classList.add("hidden");
+});
+/* 毎フレーム: READY → GO! → 開始。設定画面を開いている間(paused)は進めない */
+function updateCountdown(dt) {
+  if (!countdown || game.paused) return;
+  countdown.t += dt;
+  if (countdown.phase === "READY" && countdown.t >= CONFIG.READY_TIME) showCountdown("GO");
+  if (countdown.t >= CONFIG.READY_TIME + CONFIG.GO_TIME) beginPlay();
+}
+
+/* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理)。READY → GO! のあと動き出す */
 function startLevel(level) {
   settings.startLevel = level;
   saveSettings();
@@ -2704,7 +2795,7 @@ function startLevel(level) {
     combo: 0, maxCombo: 0, destroyed: 0,
     level, required: requiredKills(level),
     timeLeft: CONFIG.TIME_LIMIT, spurt: false,
-    started: true, over: false, cleared: false, paused: false,
+    started: false, over: false, cleared: false, paused: false,
   });
   meteors = [];
   particles = [];
@@ -2719,7 +2810,8 @@ function startLevel(level) {
   shake = 0;
   dangerFlash = 0;
   overlayEl.classList.add("hidden");
-  if (settings.bgm) BGM.start(); // ユーザー操作の中で呼ばれる前提
+  countdown = { t: 0, phase: "" }; // BGM は GO! のあと beginPlay() で鳴らす
+  showCountdown("READY");
   updateHud();
   shownSec = -1;
   updateTimer();
@@ -2738,6 +2830,8 @@ function goToTitle() {
   confetti = [];
   floaters = [];
   lockedTarget = null;
+  countdown = null;
+  countdownEl.classList.add("hidden");
   BGM.stop(0.4);
   overlayEl.classList.add("hidden");
   renderLevelPicker(); // 直前のプレイで解放レベルが増えていれば反映
@@ -2795,7 +2889,7 @@ function renderLevelPicker() {
   pickerEl.classList.toggle("scrolls", pickerEl.scrollHeight > pickerEl.clientHeight + 1);
   const [lo, hi] = lenRange(settings.startLevel);
   levelDescEl.textContent =
-    `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)} ／ ${lo === hi ? lo : `${lo}〜${hi}`}文字 ／ 規定 ${requiredKills(settings.startLevel)}個`;
+    `${levelLabel(settings.startLevel)} ／ ${lo === hi ? lo : `${lo}〜${hi}`}文字 ／ 規定 ${requiredKills(settings.startLevel)}個`;
   const top = maxClearedLevel(records);
   startBestEl.textContent = top ? `LEVEL ${top}` : "—";
   btnRecordsEl.disabled = top === 0;
@@ -3039,6 +3133,7 @@ stBgmEl.addEventListener("change", () => {
 
 /* ---- 更新と描画 ---- */
 function update(dt) {
+  updateCountdown(dt);
   if (game.started && !game.over && !game.paused) {
     /* 残り時間。ラストスパート突入は1回だけ、秒が変わるごとにカウント音 */
     const prevSec = Math.ceil(game.timeLeft);

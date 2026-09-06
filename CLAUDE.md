@@ -70,15 +70,15 @@ npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
 - **1プレイ = 1レベル（固定）**。終了条件は「`destroyed >= required` でクリア」か「`TIME_LIMIT` の時間切れ」の2つだけ。ライフもスコアもない
 - **規定数** `requiredKills(level) = max(1, round(TIME_LIMIT / spawnIntervalFor(level) * CLEAR_RATIO))`。出現間隔を変えると規定数も変わる
 - **着地は撃破数 −1**（0未満にならない）＋コンボリセット＋揺れ。ミス入力はコンボリセットのみ
-- **隠しステージは平和**: ビーム・爆発・危険ライン・揺れ・減点が無い（ふきだしの着地は「…？」と消えてコンボが切れるだけ）。`game.level` はクリアしたレベルのまま（`settings.startLevel` は変えない）で、`juni.records` には何も書かない（`maxClearedLevel()` と解放上限に影響しない）。結果はベスト友好度 `settings.secretBest`（0〜100）だけを更新し、記録一覧の末尾に「？？？」行として出す。隠しステージから戻る先はタイトルだけ
+- **隠しステージは平和**: ビーム・爆発・危険ライン・揺れ・減点が無い（ふきだしの着地は「…？」と消えてコンボが切れるだけ）。`game.level` はクリアしたレベルのまま（`settings.startLevel` は変えない）で、`juni.records` には何も書かない（`maxClearedLevel()` と解放上限に影響しない）。結果は入ったレベルごとのベスト友好度 `settings.secretBests[level]`（0〜100）だけを更新し、記録一覧ではそのレベルの直後に「？？？」行として出す。旧形式 `settings.secretBest`（レベル無し）は起動時と同期の統合時に捨てる（`cleanSecretBests`）。宇宙人の肌の色は `PALETTE.ALIEN_SKINS` を入ったレベル順（L5, L10, …）に使う（`alienSkin(level)`）。隠しステージから戻る先はタイトルだけ
 - **場の補充**: 隕石が `METEOR_MIN` 未満なら出現間隔を待たずに補充する（`SPAWN_MIN_GAP` は空ける）。速く撃破するほど早くクリアできる根拠
 - **開始レベル**: 解放上限 = `maxClearedLevel() + 1`（上限なし）。選択肢は最低 `START_LEVEL_SHOWN` 個、解放が超えたぶんだけ増え、枠(`--lv-rows` 段)内でスクロール。`startLevel(level)` は `settings.startLevel` も更新する
 - **記録**: クリア時のみ更新。`juni.records[level]` はベストタイム更新（初クリア含む）のときだけ丸ごと置き換える。時間切れは記録に触れない。行別正答率の ↑↓ は同レベルの前ベストとの比較
 - **リザルトの遷移**: クリア「次のレベルへ」と時間切れ「もう一度」は `startLevel()` で開始（タイトルを経由しない。READY → GO! の間は `game.started` が false で、隕石・タイマー・入力すべて止まっている）。「タイトルへ」と一時停止「やり直す」は `goToTitle()`。記録閲覧（view）の「閉じる」はオーバーレイを閉じるだけ（下にタイトルが残っている）
 - **ドット文字は1か所のデータから**: ロゴも英字見出しもすべて `PIXEL_FONT` から描く。`PIXEL_FONT` にない文字は空白として描かれる（日本語は描けない。日本語の見出しは明朝体のまま）。ロゴの文字を変えるときは `LOGO.LINES` を、見出しの文言は `PIXEL_HEADINGS` を変える。HUD の幅は2段構成が前提（狭い端末は `--logo-hud-h-narrow` で縮める）
 - **共有画像**: `buildShareImage(rec)` は 1080×1080 の canvas を返す純関数。`shareResult()` は Web Share API（`navigator.canShare({files})`）→ 失敗/非対応なら `#share` に `<img>` とダウンロードリンクを出す
-- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel, secretBest）/ `juni.sync`（`{ updatedAt }` 手元の記録・設定を最後に変えた時刻）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
-- **クラウド同期の統合規則**（端末側 `Cloud.mergeData` とサーバー側 `mergeData` で同一）: 記録はレベルごとに**タイムが短いほう**、設定は **`updatedAt` が新しいほう**（ただし `settings.secretBest` は端末側で**高いほう**を取る。サーバーは設定を丸ごと扱うので変更不要）。サーバーから受け取ったデータの書き戻し中は `applyingCloud` で「手元の変更」扱いにしない（無限に押し返さないため）。プレイ中は設定を書き戻さない（音やヒントが途中で変わらないように）
+- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel, secretBests）/ `juni.sync`（`{ updatedAt }` 手元の記録・設定を最後に変えた時刻）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
+- **クラウド同期の統合規則**（端末側 `Cloud.mergeData` とサーバー側 `mergeData` で同一）: 記録はレベルごとに**タイムが短いほう**、設定は **`updatedAt` が新しいほう**（ただし `settings.secretBests` は端末側でレベルごとに**高いほう**を取る。サーバーは設定を丸ごと扱うので変更不要）。サーバーから受け取ったデータの書き戻し中は `applyingCloud` で「手元の変更」扱いにしない（無限に押し返さないため）。プレイ中は設定を書き戻さない（音やヒントが途中で変わらないように）
 - **ログインは任意**。未ログイン・バックエンド無しでも従来どおり localStorage だけで動く。ログアウトしても手元の記録は消さない
 
 ## 進め方（このリポジトリでの合意事項）

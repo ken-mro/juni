@@ -26,6 +26,7 @@
   --logo-hud-h-narrow: 22px;  /* 狭い端末でのHUDロゴの高さ */
   --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
   --pixel-heading-h: 30px;    /* リザルト見出し(CLEAR! / TIME UP)のドット文字の高さ */
+  --pixel-intro-h: 58px;      /* 隠しステージ説明の見出し(FIRST / CONTACT の2段)のドット文字の高さ */
   --pixel-countdown-h: 40px;  /* スタート直後の READY / GO! のドット文字の高さ */
   --countdown-fade: 0.45s;    /* ゲームが動き出してから GO! が消えるまでの時間 */
   --pixel-rank-h: 22px;       /* ランク文字(S/A/B/C)のドット文字の高さ */
@@ -327,6 +328,7 @@ html, body {
 }
 /* リザルトの見出しはドット文字(SVG)。中身は showResult() が入れる */
 .go-title .pixel { height: var(--pixel-heading-h); margin: 0 auto; }
+.go-title.secret-title .pixel { height: var(--pixel-intro-h); }
 .pixel { display: block; width: auto; }
 .pixel .logo-shadow { fill: var(--logo-shadow); }
 
@@ -733,13 +735,14 @@ i.down { color: var(--danger); }
   height: auto;
   filter: drop-shadow(0 0 10px var(--logo-glow));
 }
-#start .start-copy {
+/* 説明文と「あそびかた」の箇条書き(タイトル画面と隠しステージの説明で共用) */
+.start-copy {
   margin: 14px 0 2px;
   font-size: 13px;
   color: var(--text);
   letter-spacing: 0.05em;
 }
-#start .start-rules {
+.start-rules {
   text-align: left;
   font-size: 12px;
   color: var(--dim);
@@ -875,6 +878,23 @@ i.down { color: var(--danger); }
       </div>
       <span id="cloud-status" class="cloud-status"></span>
     </div>
+  </div>
+</div>
+
+<!-- 隠しステージの説明: リザルトの「?」→ ここ → 「はじめる」で startSecret() -->
+<div id="secret-intro" class="modal hidden">
+  <div class="panel">
+    <div class="go-title secret-title" id="secret-intro-title"></div>
+    <p class="start-copy">宇宙人があらわれた！</p>
+    <div class="sec-title">あそびかた</div>
+    <ul class="start-rules">
+      <li>UFO から降ってくる「ふきだし」のことばを、フリックで打ち返す</li>
+      <li>1語 打ち返すごとに友好度が上がり、宇宙人がよろこぶ</li>
+      <li>落としても減点なし。友好度 100% か 60秒で終了</li>
+      <li>ベスト友好度は記録に残る</li>
+    </ul>
+    <button id="secret-start" class="primary">はじめる</button>
+    <button id="secret-title-btn" class="ghost">タイトルへ</button>
   </div>
 </div>
 
@@ -1129,6 +1149,7 @@ const PIXEL_HEADINGS = {
   READY: { text: "READY", fill: ["--cyan", "--ember"] },
   GO: { text: "GO!", fill: ["--ember", "--pink"] },
   SECRET: { text: "THANK YOU", fill: ["--cyan", "--pink"] }, // 隠しステージのリザルト
+  SECRET_INTRO: { lines: ["FIRST", "CONTACT"], fill: ["--cyan", "--pink"] }, // 隠しステージの説明(2段)
   RANK_LABEL: "RANK",
 };
 /* 太字のドットフォント(高さ7・2ドット幅の線)。幅は文字ごと(行文字列の長さ)。英大文字・数字・記号 */
@@ -2986,9 +3007,24 @@ document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
   startLevel(game.level);
 });
+/* 「?」→ 説明パネル → 「はじめる」で、いまクリアしたレベルの語彙のまま隠しステージへ */
+const secretIntroEl = document.getElementById("secret-intro");
 document.getElementById("go-secret").addEventListener("click", () => {
   SFX.ensure();
-  startSecret(game.level); // いまクリアしたレベルの語彙で隠しステージへ
+  overlayEl.classList.add("hidden");
+  const head = PIXEL_HEADINGS.SECRET_INTRO;
+  document.getElementById("secret-intro-title").innerHTML = buildPixelSvg(head.lines, head.fill);
+  secretIntroEl.classList.remove("hidden");
+});
+document.getElementById("secret-start").addEventListener("click", () => {
+  SFX.ensure();
+  secretIntroEl.classList.add("hidden");
+  startSecret(game.level);
+});
+document.getElementById("secret-title-btn").addEventListener("click", () => {
+  SFX.ensure();
+  secretIntroEl.classList.add("hidden");
+  goToTitle();
 });
 document.getElementById("go-close").addEventListener("click", () => {
   SFX.ensure();

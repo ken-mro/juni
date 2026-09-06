@@ -1,2 +1,7 @@
 .playwright-mcp/
 *.png
+# Cloudflare Workers
+dist/
+.wrangler/
+.dev.vars
+node_modules/

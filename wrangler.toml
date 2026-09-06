@@ -1,0 +1,33 @@
+# FLICK IMPACT — Cloudflare Workers の設定(flick-impact.com)
+# 秘密情報はここに書かず `npx wrangler secret put GOOGLE_CLIENT_SECRET` / `SESSION_SECRET` で登録する。
+# ローカル開発は .dev.vars(git管理外)に同名で書く。手順は README.md
+
+name = "flick-impact"
+main = "worker/index.js"
+compatibility_date = "2026-04-01"
+
+# 独自ドメイン。デプロイ時に DNS レコードも自動で作られる(ゾーンが同じアカウントにあること)
+routes = [
+  { pattern = "flick-impact.com", custom_domain = true },
+  { pattern = "www.flick-impact.com", custom_domain = true },
+]
+
+# 配信する静的ファイル(index.html のみ)を dist/ に集める。dev では index.html の変更で再実行される
+[build]
+command = "node worker/build.mjs"
+watch_dir = ["index.html", "worker"]
+
+# 静的アセット: dist/index.html のみ。全リクエストを一度 Worker に通す(www の転送・API の振り分け)
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+GOOGLE_CLIENT_ID = "37884375037-1m4booa49j2upt3cfgpqonms8j2kdd5o.apps.googleusercontent.com"
+CANONICAL_HOST = "flick-impact.com"
+
+# プレイデータの保存先。`npx wrangler kv namespace create PLAYDATA` で作った id を貼る
+[[kv_namespaces]]
+binding = "PLAYDATA"
+id = "403ef260d6a54ad28d9b6ba4c331568f"

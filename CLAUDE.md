@@ -4,14 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-「FLICK IMPACT」（旧称: 十二 JŪNI。リポジトリ名・URL・localStorage キーは `juni` のまま）— フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。**1プレイ = 1レベル**で、60秒以内に規定数を撃破すればクリア。成績は**クリアタイム**（短いほど良い）。仕様の原典は [spec.md](spec.md)。実装は **index.html 一枚**で完結する。
+「FLICK IMPACT」（旧称: 十二 JŪNI。リポジトリ名・localStorage キーは `juni` のまま）— フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。**1プレイ = 1レベル**で、60秒以内に規定数を撃破すればクリア。成績は**クリアタイム**（短いほど良い）。仕様の原典は [spec.md](spec.md)。ゲーム本体は **index.html 一枚**で完結する。公開URLは **https://flick-impact.com**（Cloudflare Workers。`worker/index.js` が配信・Google ログイン・プレイデータ保存を担う。セットアップ手順は [README.md](README.md)）。
 
 ## 絶対に守る制約
 
 - **単一HTMLファイル**。CSS/JSすべてインライン。外部依存ゼロ（CDN・npm・ビルドツール・音源ファイル不可。音はWeb Audio APIで合成、共有画像も canvas で描く）
 - 入力は **Pointer Events で統一**（`touchstart` 禁止）。マウスでも同じコードパスが通る
 - 調整用の数値はファイル先頭に集約: レイアウト系・DOMの色は CSS `:root` のカスタムプロパティ、ゲームプレイ系は `<script>` 先頭の `CONFIG`、canvas の描画色は `PALETTE`。関数内にマジックナンバー・色コードを埋めない
-- 配信先は GitHub Pages（静的）。`localStorage` は使用可
+- 配信先は Cloudflare Workers（`flick-impact.com`）。静的アセットとして `index.html` を配信し、`/auth/*` `/api/*` だけ Worker が処理する。`index.html` はバックエンド無し（GitHub Pages など）でも壊れない（`/api/me` が JSON を返さなければクラウド同期の UI を出さない）
+- **Google ログインは Worker 側で完結させる**（Authorization Code + PKCE）。HTML に Google のスクリプトを読み込まない。取得するのは表示名だけ（スコープ `openid profile`）
+- Worker も外部依存ゼロ（npm パッケージ不使用・ES module 一本）。調整値は `worker/index.js` 先頭の `SETTINGS`、秘密情報は `wrangler secret`（`GOOGLE_CLIENT_SECRET` / `SESSION_SECRET`）。ファイルに秘密を書かない
+- `localStorage` は使用可
 
 ## 動作確認の方法
 
@@ -20,6 +23,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```powershell
 python -m http.server 8321 --directory c:\Source\Repos\juni
 ```
+
+ログイン・クラウド同期まで確認するときは Worker ごと動かす（KV はローカル保存。秘密情報は git 管理外の `.dev.vars`）:
+
+```powershell
+npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
+```
+
+- `--local-upstream` が無いと wrangler が独自ドメイン設定を読み、Google へ渡すリダイレクト先が本番URLになる
+- Google の同意画面はローカルでは通せない。ログイン済み状態は `.dev.vars` の `SESSION_SECRET` で署名した `fi_session` Cookie（`base64url(JSON{sub,name,exp}) + "." + base64url(HMAC-SHA256)`）を Playwright の `addCookies` で入れて再現する
 
 - ブラウザ確認は **http://127.0.0.1:8321** を使う。**localhost（::1）は使わない** — この開発機ではIPv6ループバックが途中で接続リセットされ、ページが読み込み途中で固まる
 - 実機（スマホ）は同一Wi-FiからPCのLAN IP（例 http://192.168.3.4:8321）で開く
@@ -38,6 +50,14 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 8. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす
 9. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
 10. **ゲーム状態・入力・UI配線**: `game`（`timeLeft`/`level`/`destroyed`/`required`/`combo`）、統計 `stats`、記録 `juni.records`、`showResult(rec, mode)`（clear / fail / view の3モード）、`finishGame(cleared)`、`startLevel(level)`、開始レベル選択、記録一覧、共有画像 `buildShareImage` / `shareResult`
+11. **クラウド同期 `Cloud`**（記録セクションの直後）: `init()`（起動時に `/api/me` → ログイン中なら `pull()`）、`pull()`（サーバーと手元を `mergeData` で統合して `apply()`）、`push()`（`PUT /api/data`。差分がなければ送らない）、`schedulePush()`（`CLOUD.PUSH_DELAY` 秒待ってまとめる）。`saveRecords` / `saveSettings` は `markLocalChange()` を通る。タイトル画面下部の `#cloud` にログイン導線と状態を表示
+
+### バックエンド `worker/index.js`（Cloudflare Worker）
+
+- `GET /auth/google/start` → Google へ（state と PKCE verifier を短命 Cookie `fi_oauth` に）→ `GET /auth/google/callback` でコード交換・ID トークン検証（aud / iss / exp）→ セッション Cookie `fi_session` を発行して `/?auth=ok` へ。失敗は `/?auth=error&reason=…`
+- `POST /auth/logout`、`GET /api/me`、`GET /api/data`、`PUT /api/data`。状態を変える要求は `Origin` が同一オリジンのときだけ受ける
+- KV `PLAYDATA` のキー `user:<sub>` に `{ records, settings, updatedAt, savedAt }`。`PUT` はサーバー側でも統合してから保存し、統合結果を返す
+- `www.` は `CANONICAL_HOST` へ 301。それ以外のパスは `env.ASSETS`（`dist/index.html`。`worker/build.mjs` が作る）
 
 ## 重要な設計判断（変更時に壊しやすい不変条件）
 
@@ -55,7 +75,9 @@ python -m http.server 8321 --directory c:\Source\Repos\juni
 - **リザルトの遷移**: クリア「次のレベルへ」と時間切れ「もう一度」は `startLevel()` で即開始（タイトルを経由しない）。「タイトルへ」と一時停止「やり直す」は `goToTitle()`。記録閲覧（view）の「閉じる」はオーバーレイを閉じるだけ（下にタイトルが残っている）
 - **ドット文字は1か所のデータから**: ロゴも英字見出しもすべて `PIXEL_FONT` から描く。`PIXEL_FONT` にない文字は空白として描かれる（日本語は描けない。日本語の見出しは明朝体のまま）。ロゴの文字を変えるときは `LOGO.LINES` を、見出しの文言は `PIXEL_HEADINGS` を変える。HUD の幅は2段構成が前提（狭い端末は `--logo-hud-h-narrow` で縮める）
 - **共有画像**: `buildShareImage(rec)` は 1080×1080 の canvas を返す純関数。`shareResult()` は Web Share API（`navigator.canShare({files})`）→ 失敗/非対応なら `#share` に `<img>` とダウンロードリンクを出す
-- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
+- **localStorage キー**: `juni.records` / `juni.settings`（guide, hint, sfx, bgm, startLevel）/ `juni.sync`（`{ updatedAt }` 手元の記録・設定を最後に変えた時刻）。旧 `juni.best` / `juni.highscore` / `juni.history` と `settings.easy` / `settings.practice` は読まない
+- **クラウド同期の統合規則**（端末側 `Cloud.mergeData` とサーバー側 `mergeData` で同一）: 記録はレベルごとに**タイムが短いほう**、設定は **`updatedAt` が新しいほう**。サーバーから受け取ったデータの書き戻し中は `applyingCloud` で「手元の変更」扱いにしない（無限に押し返さないため）。プレイ中は設定を書き戻さない（音やヒントが途中で変わらないように）
+- **ログインは任意**。未ログイン・バックエンド無しでも従来どおり localStorage だけで動く。ログアウトしても手元の記録は消さない
 
 ## 進め方（このリポジトリでの合意事項）
 

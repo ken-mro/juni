@@ -913,6 +913,9 @@ const CONFIG = {
   ENDLESS_SPEED_PER_LEVEL: 0.08, // L6以降、1レベルごとの速度上昇(L5比+8%ずつ)
   ENDLESS_SPAWN_PER_LEVEL: 0.04, // L6以降、1レベルごとの出現間隔短縮(-4%ずつ)
   SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
+  /* レベル別の読みの文字数 [最小, 最大]。最小は常に2で、最大がレベルごとに1文字ずつ増える。
+     L1 は2文字だけ、L6 以降(末尾)は制限なし(2〜METEOR_MAX_LEN 文字 = 全語)。末尾以降は末尾で固定 */
+  LEVEL_LEN: [[2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]],
 
   /* 開始レベル選択。解放上限 = クリア済み最高レベル + 1(上限なし)。
      選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
@@ -1398,9 +1401,22 @@ function levelLabel(level) {
   return level <= LEVELS.length ? LEVELS[level - 1].label : "全字種・スピードアップ";
 }
 
-/* レベルごとの出題プールを起動時に確定しておく */
-const LEVEL_POOLS = LEVELS.map((def) => LEXICON.filter((w) =>
-  w.rows.every((r) => def.rows.includes(r)) && (w.flags & ~def.flags) === 0));
+/* そのレベルの読みの文字数 [最小, 最大]。LEVEL_LEN を超えたら末尾で固定 */
+function lenRange(level) {
+  return CONFIG.LEVEL_LEN[Math.min(level, CONFIG.LEVEL_LEN.length) - 1];
+}
+
+/* レベルごとの出題プールを起動時に確定しておく。字種(LEVELS)と文字数(LEVEL_LEN)の両方で絞る。
+   どちらも末尾以降は固定なので、プールは長いほうの定義の数だけ作れば足りる */
+const POOL_LEVELS = Math.max(LEVELS.length, CONFIG.LEVEL_LEN.length);
+const poolIndex = (level) => Math.min(level, POOL_LEVELS) - 1;
+const LEVEL_POOLS = Array.from({ length: POOL_LEVELS }, (_, i) => {
+  const def = LEVELS[Math.min(i, LEVELS.length - 1)];
+  const [lo, hi] = lenRange(i + 1);
+  return LEXICON.filter((w) =>
+    w.rows.every((r) => def.rows.includes(r)) && (w.flags & ~def.flags) === 0 &&
+    w.len >= lo && w.len <= hi);
+});
 /* レベルごとに「直近何語の語頭を避けるか」。語頭の種類が少ないプール(L1は15種)では
    種類数 − SLACK まで自動で下げる(下げないと候補が尽きて規則が無意味になる) */
 const LEVEL_FIRST_LIMIT = LEVEL_POOLS.map((p) => {
@@ -1594,7 +1610,7 @@ function pickWord(pool) {
 }
 
 function spawnMeteor() {
-  const poolIdx = Math.min(game.level, LEVELS.length) - 1;
+  const poolIdx = poolIndex(game.level);
   const word = pickWord(LEVEL_POOLS[poolIdx]);
   recentWords.push(word.reading);
   recentWords = recentWords.slice(-CONFIG.RECENT_WORDS);
@@ -2777,8 +2793,9 @@ function renderLevelPicker() {
   activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
   /* スクロールが生じるときだけ右余白を取る(スクロールバーと番号の重なり防止) */
   pickerEl.classList.toggle("scrolls", pickerEl.scrollHeight > pickerEl.clientHeight + 1);
+  const [lo, hi] = lenRange(settings.startLevel);
   levelDescEl.textContent =
-    `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)} ／ 規定 ${requiredKills(settings.startLevel)}個`;
+    `LEVEL ${settings.startLevel}: ${levelLabel(settings.startLevel)} ／ ${lo === hi ? lo : `${lo}〜${hi}`}文字 ／ 規定 ${requiredKills(settings.startLevel)}個`;
   const top = maxClearedLevel(records);
   startBestEl.textContent = top ? `LEVEL ${top}` : "—";
   btnRecordsEl.disabled = top === 0;

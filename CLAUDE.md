@@ -45,7 +45,7 @@ npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
 3. **入力データ**: `KEY_LAYOUT`（3×4キー）、`FLICK_MAP`（キー行→[中央,左,上,右,下]、nullは無反応）、`CYCLES`（小゛゜の変換循環 か→が、は→ば→ぱ、つ→っ→づ）
 4. **単語データ `WORDS`**: `"よみ|表記"` 形式のベタ書き（約600語、宇宙系2割。レベル別プールの順に並べてある）。起動時に `validateReading`（不正文字・`METEOR_MAX_LEN` 超え・語頭の ん/を/ー/小文字）と読みの重複を検査し、不正語は `console.warn` してスキップ。かなの網羅状況（未出現のかな・語頭に立たない清音）を `console.info` で報告する。各語に `first`（先頭のひらがな）と `firstToken`（先頭の入力トークン）を付与
 5. **語彙モジュール**: `toBase` / `rowOf` / `extraCost` / `analyze`（`actions`=実フリック回数が難易度基準）
-6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `LEVEL_POOLS`（起動時確定）。`speedScale(level)` / `spawnScale(level)` / `spawnIntervalFor(level)` / `requiredKills(level)` はレベルを引数に取る純関数。L6以降は速度と出現頻度が上がり続け、規定数も増える
+6. **レベル**: `LEVELS`（行の解放が難易度の主軸）と `CONFIG.LEVEL_LEN`（読みの文字数の範囲。最小は常に2、最大がレベルごとに1文字ずつ増え、L1 は2文字だけ、L6 以降は制限なし）の両方で絞った `LEVEL_POOLS`（起動時確定。`poolIndex(level)` で引く）。`speedScale(level)` / `spawnScale(level)` / `spawnIntervalFor(level)` / `requiredKills(level)` / `lenRange(level)` はレベルを引数に取る純関数。L6以降は速度と出現頻度が上がり続け、規定数も増える
 7. **ドット文字**: `pixelRuns(lines)` が `PIXEL_FONT` から文字列（複数行・中央揃え）のドット配置（横連続をまとめた矩形）を作る。`buildPixelSvg(lines, fill, className)` は DOM 用の SVG 文字列（影＋グラデーション。`fill` は CSS 変数名の配列か `"currentColor"`）、`buildLogoSvg()` はそのロゴ版。`drawPixelText()` は canvas（共有画像）へ同じ配置を描く。使用箇所: HUD・タイトルのロゴ、リザルト見出し（CLEAR! / TIME UP）、RANK とランク文字（リザルト・記録一覧・共有画像）、共有画像の LEVEL n CLEAR。favicon は `<head>` の data URI（SVG: 左下の地球へ「あ」の隕石が落ちてくる）
 8. **canvas ゲーム**: 隕石・破片・浮遊テキスト（撃破語の表記 / COMBO / ラスト10秒 / -1）の描画と `requestAnimationFrame` + `dt` 駆動の `update`/`draw`。空の色は `sky` がレベルの色へなじむ。着地時は `shake` で全体を揺らす。下端には地球の地平線 `drawEarth()`（装飾。高さ `CONFIG.EARTH_H` は `--earth-h` として `#chip` の位置にも使う）があり、正しい入力のたびに地球の頂点から隕石へビーム `fireBeam()` / `drawBeams()` が走る。ロック中の隕石は最後に描いて最前面にし、岩の色を `PALETTE.METEOR_*_LOCK` に変える。記録更新の紙吹雪 `confetti` はモーダルより上の全画面 `#fx` canvas（`drawFx()`）に描く
 9. **SFX / BGM**: Web Audio合成。AudioContext は SFX に1つだけ生成し `SFX.context()` で BGM と共有。**初回のユーザー操作（スタートボタン/キータッチ）でしか起動できない**。BGM はチップチューン（`MELODY`/`CHORDS` を先読みスケジューラで予約。テンポはレベルとラストスパートで上がる）
@@ -64,7 +64,7 @@ npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
 - **`FLICK_MAP` が唯一の真実**。かな→行の対応（`KANA_ROW`）、語彙バリデーション、次キーヒントはすべてここから導出される。キー配置を変えるときは他を触らない
 - **入力の展開モデル**: 各文字は実際の打鍵列に展開される（が=[か,゛]、ぱ=[は,゛,゛]、っ=[つ,゛]）。展開は `CYCLES` の位置から決まる。一方スコア用の `COST`（濁1/半濁2/小1）は仕様の規定値で、実打鍵数と一致しない文字（づ）があるが**仕様が優先**
 - **ターゲティング**: 最初に一致した入力で隕石にロックされ、破壊・着地まで対象は変わらない。出題時は場の隕石と先頭入力トークンが重複しない語を選ぶ（表示文字でなくトークン基準）
-- **出題規則**（`pickWord`）: 候補をフィルタして一様に選ぶ。第1候補は「語頭のひらがな（が≠か）が直近 `RECENT_FIRST_KANA` 語に出ていない ∧ 場内トークン重複なし ∧ 同じ語が直近 `RECENT_WORDS` 語に出ていない」。以降、同じ語→語頭の順に条件を緩め、場内重複回避だけは最後まで残す。語頭を避ける語数は `LEVEL_FIRST_LIMIT[i] = clamp(RECENT_FIRST_KANA, 1, プールの語頭種類数 − FIRST_KANA_SLACK)`（L1 は 13、L2 以降 20）。語彙を減らすときはこの前提（L2 以降で語頭 22 種以上）を壊さない
+- **出題規則**（`pickWord`）: 候補をフィルタして一様に選ぶ。第1候補は「語頭のひらがな（が≠か）が直近 `RECENT_FIRST_KANA` 語に出ていない ∧ 場内トークン重複なし ∧ 同じ語が直近 `RECENT_WORDS` 語に出ていない」。以降、同じ語→語頭の順に条件を緩め、場内重複回避だけは最後まで残す。語頭を避ける語数は `LEVEL_FIRST_LIMIT[i] = clamp(RECENT_FIRST_KANA, 1, プールの語頭種類数 − FIRST_KANA_SLACK)`（L1 は 13、L2 以降 20）。語彙を減らすときや `LEVEL_LEN` の文字数範囲を変えるときはこの前提（L2 以降で語頭 22 種以上）を壊さない（起動時の `console.log` でプールの語数と語頭回避数を確認できる）
 - **canvas/DOM の境界**: フィールドのみ canvas（座標はCSSピクセル、dprは `setTransform` で吸収）。キーパッド・HUD・オーバーレイ・フリックガイドは DOM。着地の判定線は canvas 下端そのもの（座標変換なし）
 - **1プレイ = 1レベル（固定）**。終了条件は「`destroyed >= required` でクリア」か「`TIME_LIMIT` の時間切れ」の2つだけ。ライフもスコアもない
 - **規定数** `requiredKills(level) = max(1, round(TIME_LIMIT / spawnIntervalFor(level) * CLEAR_RATIO))`。出現間隔を変えると規定数も変わる

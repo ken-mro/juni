@@ -21,7 +21,6 @@
   --lv-h: 44px;               /* 開始レベル選択の1マスの高さ(番号+ベストタイムの2行) */
   --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
   --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
-  --lv-scroll-gap: 12px;      /* スクロールバーが出るときにマスの右側へ空ける余白 */
   --logo-hud-h: 28px;         /* HUDのロゴ(2段のドット文字)の高さ */
   --logo-hud-h-narrow: 22px;  /* 狭い端末でのHUDロゴの高さ */
   --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
@@ -454,11 +453,10 @@ i.down { color: var(--danger); }
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y; /* body の touch-action: none を上書きして縦スクロールを許す */
-  scrollbar-width: thin;
-  scrollbar-color: var(--key-edge) transparent;
+  /* スクロールバーは出さない: 出るとマスの幅が縮んで見た目が変わる(スマホでは指で送れる) */
+  scrollbar-width: none;
 }
-/* 実際にスクロールするときだけ右に余白を取り、スクロールバーが番号に重ならないようにする */
-.level-picker.scrolls { padding-right: var(--lv-scroll-gap); }
+.level-picker::-webkit-scrollbar { display: none; }
 .lv {
   height: var(--lv-h);
   display: flex;
@@ -719,9 +717,10 @@ i.down { color: var(--danger); }
 .start-actions .outline-btn { padding: 10px 0; }
 #btn-start { margin-top: 14px; } /* レベル選択の直下に置く */
 
-/* ---- 設定・一時停止ボタン(フィールド右下) ---- */
+/* ---- 設定・一時停止ボタン(フィールド右下)とロック解除ボタン(フィールド左下) ---- */
 #btn-settings,
-#btn-pause {
+#btn-pause,
+#btn-unlock {
   position: absolute;
   right: 12px;
   bottom: 12px;
@@ -739,6 +738,23 @@ i.down { color: var(--danger); }
   justify-content: center;
 }
 #btn-pause { right: 60px; }
+/* ロック解除: ロック中の隕石があるときだけ出る。照準と同じシアンで「いまロック中」も兼ねる */
+#btn-unlock {
+  right: auto;
+  left: 12px;
+  width: auto;
+  padding: 0 12px 0 9px;
+  gap: 6px;
+  border-radius: 20px;
+  border-color: var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+#btn-unlock.hidden { display: none; }
 
 /* ---- スタート画面 ---- */
 #start .start-title {
@@ -825,6 +841,8 @@ i.down { color: var(--danger); }
     <canvas id="cv"></canvas>
     <div id="countdown" class="hidden"></div>
     <div id="chip"></div>
+    <!-- 照準のロック解除(ロック中だけ表示)。ミスタイプで違う隕石にロックしたときに外す -->
+    <button id="btn-unlock" class="hidden" aria-label="照準のロックを解除"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/></svg>ロック解除</button>
     <button id="btn-pause" aria-label="一時停止"><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.2" y="1.5" width="3.4" height="11" rx="1.4" fill="currentColor"/><rect x="8.4" y="1.5" width="3.4" height="11" rx="1.4" fill="currentColor"/></svg></button>
     <button id="btn-settings" aria-label="設定">⚙&#xFE0E;</button>
   </div>
@@ -1960,6 +1978,8 @@ const SFX = (() => {
     chime() { melody([76, 80, 83, 88], 0.05, 0.28, { type: "triangle", vol: 0.16 }); },
     /* ミス入力: 短く低いブザー */
     miss() { tone(180, 0.14, { type: "square", vol: 0.18, slide: -60 }); },
+    /* 照準のロック解除: 短く下がる1音(ミスより軽く) */
+    unlock() { tone(880, 0.09, { type: "square", vol: 0.1, slide: -320 }); },
     /* 隕石着地(撃破数−1): 落ちる2音。警報にはしない */
     land() {
       tone(320, 0.22, { vol: 0.4, slide: -200 });
@@ -2538,6 +2558,35 @@ function onMiss(token) {
   SFX.miss();
   updateHud();
 }
+
+/* ---- 照準のロック解除: ミスタイプで違う隕石にロックしたときに外す。
+   フィールド左下の「ロック解除」ボタンか、フィールドのタップで解除する。
+   外した隕石に入った文字(ヒビ)はそのまま残り、次の入力は通常どおり最も下の一致する隕石を狙う ---- */
+const btnUnlockEl = document.getElementById("btn-unlock");
+let shownUnlock = false; // ボタンの表示状態(毎フレームのDOM更新を避ける)
+
+function unlockTarget() {
+  if (!lockedTarget || !game.started || game.over || game.paused) return;
+  lockedTarget = null;
+  SFX.unlock();
+  updateUnlockBtn();
+}
+
+/* ロック中(かつプレイ中)だけボタンを出す */
+function updateUnlockBtn() {
+  const show = lockedTarget !== null && game.started && !game.over && !game.paused;
+  if (show === shownUnlock) return;
+  shownUnlock = show;
+  btnUnlockEl.classList.toggle("hidden", !show);
+}
+btnUnlockEl.addEventListener("click", () => {
+  SFX.ensure();
+  unlockTarget();
+});
+cv.addEventListener("pointerdown", () => {
+  SFX.ensure();
+  unlockTarget();
+});
 
 function onDestroy(meteor) {
   game.destroyed++;
@@ -3187,8 +3236,6 @@ function renderLevelPicker() {
     pickerEl.appendChild(b);
   }
   activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
-  /* スクロールが生じるときだけ右余白を取る(スクロールバーと番号の重なり防止) */
-  pickerEl.classList.toggle("scrolls", pickerEl.scrollHeight > pickerEl.clientHeight + 1);
   const [lo, hi] = lenRange(settings.startLevel);
   levelDescEl.textContent =
     `${levelLabel(settings.startLevel)} ／ ${lo === hi ? lo : `${lo}〜${hi}`}文字 ／ 規定 ${requiredKills(settings.startLevel)}個`;
@@ -4051,6 +4098,7 @@ function frame(now) {
   lastTime = now;
   update(dt);
   updateHint();
+  updateUnlockBtn();
   draw();
   requestAnimationFrame(frame);
 }

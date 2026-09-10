@@ -1000,11 +1000,11 @@ const CONFIG = {
   GO_TIME: 0.5,         // GO! を出してから隕石が動き出すまでの秒数(以後 GO! は消えながら残る)
   FINISH_TIME: 2.5,     // 終了時に CLEAR! / TIME UP をフィールドに出してからリザルトを開くまでの秒数(直後の誤タップ防止)
   LAST_SPURT: 10,       // 残りこの秒数からラストスパート演出(タイマー赤・秒カウント音・BGM加速)
-  CLEAR_RATIO: 0.8,     // 規定撃破数 = 1分間の出現予定数(60秒÷出現間隔) × この係数
+  CLEAR_RATIO: 0.75,    // 規定撃破数 = 1分間の出現予定数(60秒÷出現間隔) × この係数
 
-  FALL_SPEED: 30,       // 隕石の基本落下速度(px/秒)
+  FALL_SPEED: 26,       // 隕石の基本落下速度(px/秒)
   FALL_SPEED_VAR: 0.25, // 落下速度の個体差(±この割合)
-  SPAWN_INTERVAL: 2.4,  // 隕石の出現間隔(秒)。規定撃破数の算出元でもある
+  SPAWN_INTERVAL: 2.7,  // 隕石の出現間隔(秒)。規定撃破数の算出元でもある
   SPAWN_MIN_GAP: 0.45,  // 場が少ないときの補充でも最低これだけは間を置く(秒)
   METEOR_MIN: 2,        // 場に常に維持する隕石数(これ未満なら間隔を待たず補充)
   METEOR_MAX: 5,        // 同時に存在できる隕石の上限
@@ -1047,15 +1047,17 @@ const CONFIG = {
   FIRST_KANA_SLACK: 2,  // プールの語頭種類数からこの数を引いた値を上限にする(L1は15種しかない)
   METEOR_MAX_LEN: 7,    // 読みの最大文字数(これを超える語は起動時にスキップ。7文字で隕石幅≈190px)
 
-  /* レベル別の難易度。行の解放が主軸で、速度・出現間隔は補助 */
-  LEVEL_SPEED: [1.0, 1.15, 1.3, 1.5, 1.7],       // L1..L5 の落下速度係数
-  LEVEL_SPAWN: [1.0, 0.93, 0.86, 0.79, 0.73],    // L1..L5 の出現間隔係数
-  ENDLESS_SPEED_PER_LEVEL: 0.08, // L6以降、1レベルごとの速度上昇(L5比+8%ずつ)
-  ENDLESS_SPAWN_PER_LEVEL: 0.04, // L6以降、1レベルごとの出現間隔短縮(-4%ずつ)
+  /* レベル別の難易度。L1〜L5 は行の解放だけで難しくなる(速度・出現間隔は据え置き)。
+     L6 から速度が上がり出現間隔が縮む。配列を超えたレベルは末尾の値から ENDLESS_* で伸び続ける */
+  LEVEL_SPEED: [1.0, 1.0, 1.0, 1.0, 1.0, 1.12, 1.25, 1.4, 1.55],   // L1..L9 の落下速度係数
+  LEVEL_SPAWN: [1.0, 1.0, 1.0, 1.0, 1.0, 0.94, 0.88, 0.82, 0.76],  // L1..L9 の出現間隔係数
+  ENDLESS_SPEED_PER_LEVEL: 0.06, // L10以降、1レベルごとの速度上昇(L9比+6%ずつ)
+  ENDLESS_SPAWN_PER_LEVEL: 0.03, // L10以降、1レベルごとの出現間隔短縮(-3%ずつ)
   SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
-  /* レベル別の読みの文字数 [最小, 最大]。最小は常に2で、最大がレベルごとに1文字ずつ増える。
-     L1 は2文字だけ、L6 以降(末尾)は制限なし(2〜METEOR_MAX_LEN 文字 = 全語)。末尾以降は末尾で固定 */
-  LEVEL_LEN: [[2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]],
+  /* レベル別の読みの文字数 [最小, 最大]。L1・L2 は1文字(かな単体。SINGLES から出題)で位置と方向を覚え、
+     L3 から単語(2文字)になって「つなげて打つ」に入る。L5 で2〜3文字(拗音は「きゃ」の形で出る)、
+     以降は最大が1文字ずつ増えて L10 以降(末尾)は制限なし(2〜METEOR_MAX_LEN 文字 = 全語)。末尾以降は末尾で固定 */
+  LEVEL_LEN: [[1, 1], [1, 1], [2, 2], [2, 2], [2, 3], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]],
 
   /* 開始レベル選択。解放上限 = クリア済み最高レベル + 1(上限なし)。
      選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
@@ -1566,15 +1568,25 @@ console.log(`[語彙] ${LEXICON.length}/${WORDS.length} 語を読み込み`);
   console.info(`[語彙] 未出現のかな: ${unused.join("") || "なし"} / 語頭に立たない清音: ${noFirst.join("") || "なし"}`);
 }
 
+/* 1文字の出題(L1・L2)。単語ではなく FLICK_MAP のかな1字を隕石にする。
+   単独では出さない字: ん・を・ー・小文字(語頭に立たない。validateReading と同じ規則)、ゔ(語彙に無い) */
+const SINGLE_SKIP = new Set(["ん", "を", "ー", "ゔ"]);
+const SINGLES = [
+  ...Object.keys(KANA_ROW), ...Object.keys(DAKUTEN_BASE), ...Object.keys(HANDAKUTEN_BASE),
+].filter((k) => !SINGLE_SKIP.has(k)).map((k) => ({
+  reading: k, display: null, first: k, firstToken: inputSeq(k)[0], ...analyze(k),
+}));
+
 /* ============================================================
-   レベル定義: 解放される行と許可フラグ
+   レベル定義: 解放される行と許可フラグ(文字数は CONFIG.LEVEL_LEN)
+   L1 で位置と5方向、L2 で残りの行、L3 から単語、L4 で゛゜、L5 で小文字(拗音)
    長音(ー)はわ行の解放と同時に出るため常に許可
    ============================================================ */
 const ALL_ROWS = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ"];
 const LEVELS = [
   { rows: ["あ", "か", "さ"], flags: FLAG.CHOUON, label: "あ・か・さ" },
-  { rows: ["あ", "か", "さ", "た", "な", "は"], flags: FLAG.CHOUON, label: "＋た・な・は" },
-  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "＋ま・や・ら・わ" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "全清音" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "全清音のことば" },
   { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN, label: "濁音・半濁音" },
   { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN | FLAG.SMALL, label: "小文字・拗音" },
 ];
@@ -1589,13 +1601,14 @@ function lenRange(level) {
 }
 
 /* レベルごとの出題プールを起動時に確定しておく。字種(LEVELS)と文字数(LEVEL_LEN)の両方で絞る。
-   どちらも末尾以降は固定なので、プールは長いほうの定義の数だけ作れば足りる */
+   1文字のレベルは SINGLES から、2文字以上は LEXICON から。どちらも末尾以降は固定なので、
+   プールは長いほうの定義の数だけ作れば足りる */
 const POOL_LEVELS = Math.max(LEVELS.length, CONFIG.LEVEL_LEN.length);
 const poolIndex = (level) => Math.min(level, POOL_LEVELS) - 1;
 const LEVEL_POOLS = Array.from({ length: POOL_LEVELS }, (_, i) => {
   const def = LEVELS[Math.min(i, LEVELS.length - 1)];
   const [lo, hi] = lenRange(i + 1);
-  return LEXICON.filter((w) =>
+  return [...SINGLES, ...LEXICON].filter((w) =>
     w.rows.every((r) => def.rows.includes(r)) && (w.flags & ~def.flags) === 0 &&
     w.len >= lo && w.len <= hi);
 });
@@ -1608,15 +1621,18 @@ const LEVEL_FIRST_LIMIT = LEVEL_POOLS.map((p) => {
 console.log(`[語彙] レベル別プール: ${LEVEL_POOLS.map((p) => p.length).join(" / ")}` +
   ` / 語頭回避数: ${LEVEL_FIRST_LIMIT.join(" / ")}`);
 
-/* ---- 難易度スケール。L1〜L5はテーブル、L6以降はレベルに比例して伸び続ける ---- */
+/* ---- 難易度スケール。テーブル(LEVEL_SPEED / LEVEL_SPAWN)の範囲内はその値、
+   超えたレベルは末尾の値からレベルに比例して伸び続ける ---- */
 function speedScale(level) {
-  if (level <= 5) return CONFIG.LEVEL_SPEED[level - 1];
-  return CONFIG.LEVEL_SPEED[4] * (1 + (level - 5) * CONFIG.ENDLESS_SPEED_PER_LEVEL);
+  const t = CONFIG.LEVEL_SPEED;
+  if (level <= t.length) return t[level - 1];
+  return t[t.length - 1] * (1 + (level - t.length) * CONFIG.ENDLESS_SPEED_PER_LEVEL);
 }
 function spawnScale(level) {
-  if (level <= 5) return CONFIG.LEVEL_SPAWN[level - 1];
+  const t = CONFIG.LEVEL_SPAWN;
+  if (level <= t.length) return t[level - 1];
   return Math.max(
-    CONFIG.LEVEL_SPAWN[4] * (1 - (level - 5) * CONFIG.ENDLESS_SPAWN_PER_LEVEL),
+    t[t.length - 1] * (1 - (level - t.length) * CONFIG.ENDLESS_SPAWN_PER_LEVEL),
     0.01);
 }
 /* そのレベルの出現間隔(秒)。下限あり */

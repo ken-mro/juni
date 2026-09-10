@@ -1054,10 +1054,10 @@ const CONFIG = {
   ENDLESS_SPEED_PER_LEVEL: 0.06, // L10以降、1レベルごとの速度上昇(L9比+6%ずつ)
   ENDLESS_SPAWN_PER_LEVEL: 0.03, // L10以降、1レベルごとの出現間隔短縮(-3%ずつ)
   SPAWN_INTERVAL_MIN: 1.0,       // 出現間隔の下限(秒)。これ以上は縮まない
-  /* レベル別の読みの文字数 [最小, 最大]。L1〜L5 は1文字(かな単体。SINGLES から出題)。
-     L6 から単語になり(2文字だけ)、最大がレベルごとに1文字ずつ増えて L11 以降(末尾)は制限なし
-     (2〜METEOR_MAX_LEN 文字 = 全語)。末尾以降は末尾で固定 */
-  LEVEL_LEN: [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]],
+  /* レベル別の読みの文字数 [最小, 最大]。L1・L2 は1文字(かな単体。SINGLES から出題)で位置と方向を覚え、
+     L3 から単語(2文字)になって「つなげて打つ」に入る。L5 で2〜3文字(拗音は「きゃ」の形で出る)、
+     以降は最大が1文字ずつ増えて L10 以降(末尾)は制限なし(2〜METEOR_MAX_LEN 文字 = 全語)。末尾以降は末尾で固定 */
+  LEVEL_LEN: [[1, 1], [1, 1], [2, 2], [2, 2], [2, 3], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]],
 
   /* 開始レベル選択。解放上限 = クリア済み最高レベル + 1(上限なし)。
      選択肢は最低 START_LEVEL_SHOWN 個を並べ、解放がそれを超えたぶんだけ増える */
@@ -1568,25 +1568,25 @@ console.log(`[語彙] ${LEXICON.length}/${WORDS.length} 語を読み込み`);
   console.info(`[語彙] 未出現のかな: ${unused.join("") || "なし"} / 語頭に立たない清音: ${noFirst.join("") || "なし"}`);
 }
 
-/* 1文字の出題(L1〜L5)。単語ではなく FLICK_MAP のかな1字を隕石にする。
-   単独では出さない字: ん・を・ー(語頭に立たない)、ゔ(語彙に無い)。小文字は L5(FLAG.SMALL)でだけ出る */
+/* 1文字の出題(L1・L2)。単語ではなく FLICK_MAP のかな1字を隕石にする。
+   単独では出さない字: ん・を・ー・小文字(語頭に立たない。validateReading と同じ規則)、ゔ(語彙に無い) */
 const SINGLE_SKIP = new Set(["ん", "を", "ー", "ゔ"]);
 const SINGLES = [
-  ...Object.keys(KANA_ROW), ...Object.keys(DAKUTEN_BASE),
-  ...Object.keys(HANDAKUTEN_BASE), ...Object.keys(SMALL_BASE),
+  ...Object.keys(KANA_ROW), ...Object.keys(DAKUTEN_BASE), ...Object.keys(HANDAKUTEN_BASE),
 ].filter((k) => !SINGLE_SKIP.has(k)).map((k) => ({
   reading: k, display: null, first: k, firstToken: inputSeq(k)[0], ...analyze(k),
 }));
 
 /* ============================================================
-   レベル定義: 解放される行と許可フラグ
+   レベル定義: 解放される行と許可フラグ(文字数は CONFIG.LEVEL_LEN)
+   L1 で位置と5方向、L2 で残りの行、L3 から単語、L4 で゛゜、L5 で小文字(拗音)
    長音(ー)はわ行の解放と同時に出るため常に許可
    ============================================================ */
 const ALL_ROWS = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ"];
 const LEVELS = [
   { rows: ["あ", "か", "さ"], flags: FLAG.CHOUON, label: "あ・か・さ" },
-  { rows: ["あ", "か", "さ", "た", "な", "は"], flags: FLAG.CHOUON, label: "＋た・な・は" },
-  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "＋ま・や・ら・わ" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "全清音" },
+  { rows: ALL_ROWS, flags: FLAG.CHOUON, label: "全清音のことば" },
   { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN, label: "濁音・半濁音" },
   { rows: ALL_ROWS, flags: FLAG.CHOUON | FLAG.DAKUTEN | FLAG.HANDAKUTEN | FLAG.SMALL, label: "小文字・拗音" },
 ];

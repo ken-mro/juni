@@ -1013,6 +1013,10 @@ const CONFIG = {
   HIT_PARTICLES: 8,     // 1文字消したときの破片の数
   BOOM_PARTICLES: 26,   // 破壊時の破片の数
   PARTICLE_GRAVITY: 120,// 破片に掛かる重力(px/秒²)
+  SMALL_BADGE_FONT: 10, // 小文字だけの隕石に付ける「小」バッジの文字サイズ(px)。1文字だと大小の比較相手が無いため
+  SMALL_BADGE_DX: 15,   // バッジ中心の位置(文字の中心からの右方向 px)
+  SMALL_BADGE_DY: -13,  // 同・上方向(px)
+  SMALL_BADGE_PAD: 3,   // バッジの角丸枠の余白(px)
   METEOR_GLOW_BLUR: 18, // 隕石の縁の燃えるにじみ(px)
   LOCK_GLOW_BLUR: 24,   // ロック中の隕石のにじみ(少し強く光る)
   SHAKE_AMP: 6,         // 隕石着地時の画面揺れの振幅(px)
@@ -1121,6 +1125,8 @@ const PALETTE = {
   CHAR_NEXT: "#ffd93d",
   CHAR_REST: "#d6d5ff",
   CHAR_OUTLINE: "rgba(18, 12, 60, 0.85)",
+  SMALL_BADGE_BG: "#ff6fb5",   // 「小」バッジ(隕石の岩・ふきだしの白地の両方で読める色)
+  SMALL_BADGE_TEXT: "#1b1252",
   LOCK: "#4ff0e6",
   /* ロック中の隕石: 岩を少し明るく、縁とにじみを照準と同じシアンに */
   METEOR_BODY_LOCK: "#5b4fc4",
@@ -3704,7 +3710,9 @@ function drawLockBracket(m) {
   }
 }
 
-/* 残りの読み: 次に打つ文字をハイライト、残りは淡く(隕石・ふきだし共用。原点は本体の中心) */
+/* 残りの読み: 次に打つ文字をハイライト、残りは淡く(隕石・ふきだし共用。原点は本体の中心)。
+   1文字だけの小文字(L5 のかな単体)は「や」と「ゃ」の見分けがつかないので「小」バッジを添える
+   (打ちかけで「や」が表示されている間も、目標が小文字なら出したままにする) */
 function drawFallerText(m, nextColor, restColor, outlineColor) {
   ctx.font = METEOR_FONT_STR;
   ctx.textAlign = "center";
@@ -3718,8 +3726,26 @@ function drawFallerText(m, nextColor, restColor, outlineColor) {
     ctx.strokeText(ch, tx, 0);
     ctx.fillStyle = i === m.charIdx ? nextColor : restColor;
     ctx.fillText(ch, tx, 0);
+    if (m.word.len === 1 && m.chars[i].ch in SMALL_BASE) drawSmallBadge(tx, 0);
     tx += CHAR_ADVANCE;
   }
+}
+
+/* 「小」バッジ: 文字の右上に小さな角丸のタグ。ctx.font は呼び出し側の値に戻す */
+function drawSmallBadge(cx, cy) {
+  const font = ctx.font;
+  const size = CONFIG.SMALL_BADGE_FONT;
+  const pad = CONFIG.SMALL_BADGE_PAD;
+  const x = cx + CONFIG.SMALL_BADGE_DX;
+  const y = cy + CONFIG.SMALL_BADGE_DY;
+  ctx.font = `bold ${size}px "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif`;
+  ctx.fillStyle = PALETTE.SMALL_BADGE_BG;
+  ctx.beginPath();
+  ctx.roundRect(x - size / 2 - pad, y - size / 2 - pad, size + pad * 2, size + pad * 2, pad + 1);
+  ctx.fill();
+  ctx.fillStyle = PALETTE.SMALL_BADGE_TEXT;
+  ctx.fillText("小", x, y + 0.5);
+  ctx.font = font;
 }
 
 /* 隠しステージのふきだし: 角丸の白い枠に、UFO へ向く上向きのしっぽ。出現直後は小さく生まれて膨らむ。

@@ -1286,7 +1286,7 @@ const CYCLES = [
   "さざ", "しじ", "すず", "せぜ", "そぞ",
   "ただ", "ちぢ", "つっづ", "てで", "とど",
   "はばぱ", "ひびぴ", "ふぶぷ", "へべぺ", "ほぼぽ",
-  "やゃ", "ゆゅ", "よょ",
+  "やゃ", "ゆゅ", "よょ", "わゎ",
 ];
 const CYCLE_NEXT = {};
 const CHAR_CYCLE = {}; // 文字 → { cycle, i } (サイクル文字列と自分の位置)
@@ -1534,6 +1534,7 @@ function validateReading(reading) {
   if (first in SMALL_BASE || first === "ー" || first === "ん" || first === "を") return `語頭に「${first}」`;
   for (const ch of reading) {
     if (rowOf(toBase(ch)) === null) return `想定外の文字「${ch}」`;
+    if (ch !== toBase(ch) && !CHAR_CYCLE[ch]) return `小゛゜で作れない文字「${ch}」`;
   }
   return null;
 }
@@ -1575,12 +1576,18 @@ console.log(`[語彙] ${LEXICON.length}/${WORDS.length} 語を読み込み`);
 }
 
 /* 1文字の出題(L1〜L5)。単語ではなく FLICK_MAP のかな1字を隕石にする。
-   単独では出さない字: ん・を・ー(語頭に立たない)、ゔ(語彙に無い)。小文字は L5(FLAG.SMALL)でだけ出る */
-const SINGLE_SKIP = new Set(["ん", "を", "ー", "ゔ"]);
+   単独では出さない字: ん・を・ー(語頭に立たない)、ゔ・ゎ(実際の文章にほぼ出ない)。小文字は L5(FLAG.SMALL)でだけ出る。
+   小゛゜で作れない字(CYCLES に無い)が紛れると絶対に壊せない隕石になるので、単語と同じ検査で除外する */
+const SINGLE_SKIP = new Set(["ん", "を", "ー", "ゔ", "ゎ"]);
 const SINGLES = [
   ...Object.keys(KANA_ROW), ...Object.keys(DAKUTEN_BASE),
   ...Object.keys(HANDAKUTEN_BASE), ...Object.keys(SMALL_BASE),
-].filter((k) => !SINGLE_SKIP.has(k)).map((k) => ({
+].filter((k) => {
+  if (SINGLE_SKIP.has(k)) return false;
+  const reason = k !== toBase(k) && !CHAR_CYCLE[k] ? `小゛゜で作れない文字「${k}」` : null;
+  if (reason) console.warn(`1文字の出題をスキップ: "${k}" — ${reason}`);
+  return !reason;
+}).map((k) => ({
   reading: k, display: null, first: k, firstToken: inputSeq(k)[0], ...analyze(k),
 }));
 

@@ -26,7 +26,8 @@
   --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
   --pixel-heading-h: 30px;    /* リザルト見出し(CLEAR! / TIME UP)のドット文字の高さ */
   --pixel-intro-h: 58px;      /* 隠しステージ説明の見出し(FIRST / CONTACT の2段)のドット文字の高さ */
-  --pixel-countdown-h: 40px;  /* スタート直後の READY / GO! のドット文字の高さ */
+  --pixel-countdown-h: 40px;  /* スタート直後の READY / GO! と終了の CLEAR! / TIME UP のドット文字の高さ */
+  --pixel-countdown-maxw: 92%; /* 同ドット文字の幅の上限(THANK YOU など長い語は縮めて収める) */
   --countdown-fade: 0.45s;    /* ゲームが動き出してから GO! が消えるまでの時間 */
   --pixel-rank-h: 22px;       /* ランク文字(S/A/B/C)のドット文字の高さ */
   --pixel-rank-label-h: 11px; /* 「RANK」のドット文字の高さ */
@@ -172,7 +173,8 @@ html, body {
   height: 100%;
   display: block;
 }
-/* スタート直後の READY → GO!(フィールド中央のドット文字。中身は showCountdown() が入れる) */
+/* スタート直後の READY → GO! と終了時の CLEAR! / TIME UP / THANK YOU
+   (フィールド中央のドット文字。中身は showCountdown() が入れる) */
 #countdown {
   position: absolute;
   inset: 0;
@@ -185,9 +187,10 @@ html, body {
 #countdown.hidden { display: none; }
 #countdown .pixel {
   height: var(--pixel-countdown-h);
+  max-width: var(--pixel-countdown-maxw);
   animation: countdown-pop 0.24s steps(3, end) both; /* コマ送りで飛び出す(レトロ調) */
 }
-/* GO! はゲームが動き出したあと、拡大しながら消える */
+/* GO! はゲームが動き出したあと、終了の文字はリザルトが開くとき、拡大しながら消える */
 #countdown.out .pixel { animation: countdown-out var(--countdown-fade) steps(4, end) both; }
 @keyframes countdown-pop {
   from { transform: scale(0.4); opacity: 0; }
@@ -995,6 +998,7 @@ const CONFIG = {
   TIME_LIMIT: 60,       // 制限時間(秒)
   READY_TIME: 1.0,      // スタート直後に READY を出す秒数(この間は隕石を出さず入力も受けない)
   GO_TIME: 0.5,         // GO! を出してから隕石が動き出すまでの秒数(以後 GO! は消えながら残る)
+  FINISH_TIME: 2.5,     // 終了時に CLEAR! / TIME UP をフィールドに出してからリザルトを開くまでの秒数(直後の誤タップ防止)
   LAST_SPURT: 10,       // 残りこの秒数からラストスパート演出(タイマー赤・秒カウント音・BGM加速)
   CLEAR_RATIO: 0.8,     // 規定撃破数 = 1分間の出現予定数(60秒÷出現間隔) × この係数
 
@@ -3042,18 +3046,22 @@ function finishGame(cleared) {
   };
   if (!cleared) {
     SFX.fail();
-    showResult(rec, "fail", { prev, best: prev });
+    showFinish("FAIL", () => showResult(rec, "fail", { prev, best: prev }));
     return;
   }
   SFX.clear();
   const isNewBest = !prev || rec.time < prev.time;
   if (isNewBest) {
-    records[game.level] = rec;
+    records[game.level] = rec; // 記録はすぐ保存し、紙吹雪と音はリザルトと一緒に出す
     saveRecords(records);
-    spawnConfetti(CONFIG.CONFETTI);
-    SFX.newRecord();
   }
-  showResult(rec, "clear", { prev, isNewBest, best: isNewBest ? rec : prev });
+  showFinish("CLEAR", () => {
+    if (isNewBest) {
+      spawnConfetti(CONFIG.CONFETTI);
+      SFX.newRecord();
+    }
+    showResult(rec, "clear", { prev, isNewBest, best: isNewBest ? rec : prev });
+  });
 }
 
 /* 隠しステージの終了: 友好度 100% か時間切れ。失敗は無く、ベスト友好度だけ settings に残す
@@ -3079,22 +3087,34 @@ function finishSecret() {
   if (isNewBest) {
     settings.secretBests[game.level] = pct;
     saveSettings();
-    spawnConfetti(CONFIG.CONFETTI);
-    SFX.newRecord();
   }
-  showResult(rec, "secret", { isNewBest, best: isNewBest ? rec : { pct: prevBest } });
+  showFinish("SECRET", () => {
+    if (isNewBest) {
+      spawnConfetti(CONFIG.CONFETTI);
+      SFX.newRecord();
+    }
+    showResult(rec, "secret", { isNewBest, best: isNewBest ? rec : { pct: prevBest } });
+  });
 }
 
-/* ---- スタート直後の READY → GO!: フィールド中央にドット文字を出し、終わってからゲームを動かす ---- */
+/* ---- スタート直後の READY → GO!: フィールド中央にドット文字を出し、終わってからゲームを動かす。
+   終了時も同じ場所に CLEAR! / TIME UP / THANK YOU を出し、少し待ってからリザルトを開く ---- */
 const countdownEl = document.getElementById("countdown");
-let countdown = null; // 進行中のみ { t: 経過秒, phase: "READY" | "GO" }
+let countdown = null; // 進行中のみ { t: 経過秒, phase: PIXEL_HEADINGS のキー, then?: 終了告知のあと開く処理 }
 
 function showCountdown(phase) {
   countdown.phase = phase;
   const head = PIXEL_HEADINGS[phase];
   countdownEl.innerHTML = buildPixelSvg([head.text], head.fill);
   countdownEl.classList.remove("hidden", "out");
-  phase === "READY" ? SFX.ready() : SFX.go();
+  if (phase === "READY") SFX.ready();
+  else if (phase === "GO") SFX.go(); // 終了の音(clear / fail)は finishGame 側で鳴らす
+}
+/* 終了の告知: リザルトをすぐ出すと直後のタップでボタンを押してしまうので、
+   CONFIG.FINISH_TIME 秒だけドット文字を見せてから then()(リザルト表示)を呼ぶ */
+function showFinish(phase, then) {
+  countdown = { t: 0, phase, then };
+  showCountdown(phase);
 }
 /* GO! の表示が終わったら実際に動かし始める(BGM もここから) */
 function beginPlay() {
@@ -3106,10 +3126,18 @@ function beginPlay() {
 countdownEl.addEventListener("animationend", () => {
   if (countdownEl.classList.contains("out")) countdownEl.classList.add("hidden");
 });
-/* 毎フレーム: READY → GO! → 開始。設定画面を開いている間(paused)は進めない */
+/* 毎フレーム: READY → GO! → 開始、または終了の告知 → リザルト。設定画面を開いている間(paused)は進めない */
 function updateCountdown(dt) {
   if (!countdown || game.paused) return;
   countdown.t += dt;
+  if (countdown.then) {
+    if (countdown.t < CONFIG.FINISH_TIME) return;
+    const { then } = countdown;
+    countdown = null;
+    countdownEl.classList.add("out"); // 文字はリザルトの下で消えていく
+    then();
+    return;
+  }
   if (countdown.phase === "READY" && countdown.t >= CONFIG.READY_TIME) showCountdown("GO");
   if (countdown.t >= CONFIG.READY_TIME + CONFIG.GO_TIME) beginPlay();
 }

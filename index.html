@@ -666,6 +666,21 @@ i.down { color: var(--danger); }
   cursor: pointer;
 }
 .primary.hidden { display: none; }
+/* 主ボタンの2番手(クリア後・隠しステージの「もう一度」): 同じ形のまま枠付きの控えめな塗りにして、主ボタンとの序列を見せる */
+.primary.secondary {
+  margin-top: 10px;
+  border: 1px solid var(--key-edge);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+}
+/* ボタン内のアイコン(次のレベルへ ▶|、もう一度 ↻)。文字色に追従する */
+.btn-ico {
+  width: 1em;
+  height: 1em;
+  margin-right: 0.4em;
+  vertical-align: -0.12em;
+}
 .ghost {
   display: block;
   margin-top: 10px;
@@ -870,8 +885,8 @@ i.down { color: var(--danger); }
     <div id="go-dirs" class="dircross"></div>
     <!-- 隠しステージへの入口。SECRET_EVERY の倍数のレベルをクリアしたときだけ出る -->
     <button id="go-secret" class="ghost secret-btn hidden" aria-label="？">?</button>
-    <button id="go-next" class="primary">次のレベルへ</button>
-    <button id="go-retry" class="primary">もう一度</button>
+    <button id="go-next" class="primary"><svg class="btn-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2.6v10.8L10 8z" fill="currentColor"/><rect x="11.2" y="2.6" width="2.4" height="10.8" rx="1" fill="currentColor"/></svg>次のレベルへ</button>
+    <button id="go-retry" class="primary"><svg class="btn-ico" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.3 8.6A5.4 5.4 0 1 1 11.9 4"/><path d="M13.2 1.8v3.6H9.6"/></svg>もう一度</button>
     <button id="go-share" class="ghost">画像を共有・保存</button>
     <button id="go-close" class="ghost">タイトルへ</button>
   </div>
@@ -3045,8 +3060,11 @@ function showResult(rec, mode, { prev = null, isNewBest = false, best = null } =
   if (best) document.getElementById("go-best").textContent = secret ? `${best.pct}%` : fmtTime(best.time);
   document.getElementById("go-combo").textContent = rec.maxCombo;
   renderResultStats(rec, prev);
-  document.getElementById("go-next").classList.toggle("hidden", mode !== "clear");
-  document.getElementById("go-retry").classList.toggle("hidden", mode !== "fail" && !secret); // 隠しステージも再挑戦できる
+  /* 次のレベルへ(クリア・隠しステージ)の下に もう一度(閲覧以外)。時間切れだけは もう一度 が主ボタン */
+  document.getElementById("go-next").classList.toggle("hidden", !(mode === "clear" || secret));
+  const retryEl = document.getElementById("go-retry");
+  retryEl.classList.toggle("hidden", mode === "view");
+  retryEl.classList.toggle("secondary", mode !== "fail");
   document.getElementById("go-share").classList.toggle("hidden", !cleared || secret);
   /* 隠しステージへの「?」: SECRET_EVERY の倍数のレベルをいまクリアしたときだけ */
   document.getElementById("go-secret").classList.toggle("hidden",

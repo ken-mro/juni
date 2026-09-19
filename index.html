@@ -21,6 +21,7 @@
   --lv-h: 44px;               /* 開始レベル選択の1マスの高さ(番号+ベストタイムの2行) */
   --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
   --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
+  --mode-h: 36px;             /* タイトルのモード切替(チャレンジ / スコアアタック)のボタンの高さ */
   --logo-hud-h: 28px;         /* HUDのロゴ(2段のドット文字)の高さ */
   --logo-hud-h-narrow: 22px;  /* 狭い端末でのHUDロゴの高さ */
   --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
@@ -445,6 +446,32 @@ i.down { color: var(--danger); }
 }
 .dircross .blank { visibility: hidden; }
 
+/* ---- モード切替(スタート画面): チャレンジ / スコアアタック。選択中はレベル選択の active と同じ塗り ---- */
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 12px;
+}
+.mode-btn {
+  height: var(--mode-h);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.mode-btn:active { background: rgba(255, 255, 255, 0.14); }
+.mode-btn.active {
+  background: linear-gradient(135deg, var(--ember), var(--pink));
+  border-color: transparent;
+  color: var(--bg-deep);
+}
+
 /* ---- 開始レベル選択(スタート画面) ---- */
 .level-picker {
   display: grid;
@@ -509,6 +536,7 @@ i.down { color: var(--danger); }
   color: var(--dim);
 }
 .best-line b { color: var(--ember); font-variant-numeric: tabular-nums; }
+.best-line.hidden { display: none; } /* スコアアタックでは各マスにベストが出るので行ごと消す */
 
 /* ---- クラウド同期(タイトル下部): ログイン導線とログイン中の表示。バックエンドが無ければ非表示 ---- */
 .cloud {
@@ -631,6 +659,9 @@ i.down { color: var(--danger); }
 .rec .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ember); }
 .rec .rec-rank { color: var(--cyan); }
 .rec .rec-rank .pixel { height: var(--pixel-rec-rank-h); }
+/* モードごとの見出し(チャレンジ / スコアアタック)。flex の gap があるので上の余白は控えめに */
+.records-list .sec-title { margin-top: 6px; }
+.records-list .sec-title:first-child { margin-top: 0; }
 /* 隠しステージのベスト友好度(押せない) */
 .rec.rec-secret { cursor: default; }
 .rec.rec-secret .rec-lv { color: var(--cyan); letter-spacing: 0.2em; }
@@ -800,6 +831,7 @@ i.down { color: var(--danger); }
   padding-left: 1.3em;
   margin: 8px 0 0;
 }
+.start-rules.hidden { display: none; } /* タイトルではモードごとの箇条書きを切り替える */
 .toggle {
   display: flex;
   justify-content: space-between;
@@ -896,11 +928,21 @@ i.down { color: var(--danger); }
   <div class="panel">
     <div class="start-title" id="start-title"></div>
     <p class="start-copy">フリック入力で地球を守れ</p>
+    <!-- モード切替。選択は settings.mode に保存し、あそびかた・開始レベル選択がモードに従う -->
+    <div id="mode-switch" class="mode-switch" aria-label="モード">
+      <button class="mode-btn" data-mode="challenge">チャレンジ</button>
+      <button class="mode-btn" data-mode="score">スコアアタック</button>
+    </div>
     <div class="sec-title">あそびかた</div>
-    <ul class="start-rules">
+    <ul id="rules-challenge" class="start-rules">
       <li>隕石のことばをフリックで撃つ</li>
       <li>60秒以内に規定数を撃破でクリア</li>
       <li>落とすと撃破数が1もどる</li>
+    </ul>
+    <ul id="rules-score" class="start-rules hidden">
+      <li>浮かぶ隕石のことばをフリックで撃つ</li>
+      <li>60秒間でいくつ壊せるか</li>
+      <li>隕石は落ちてこない・減点なし</li>
     </ul>
     <div class="sec-title">開始レベル</div>
     <div id="level-picker" class="level-picker"></div>
@@ -1057,6 +1099,7 @@ const CONFIG = {
   BGM_BPM: 132,         // BGMの基本テンポ(チップチューン)
   BGM_BPM_PER_LEVEL: 2, // レベルごとのテンポ上昇
   BGM_SPURT_BPM_ADD: 16,// ラストスパート中のテンポ加算
+  BGM_FADE_IN: 0.08,    // 開始時にBGMをフェードインさせる秒数(クリック音を避ける最小限。長いと曲の頭の音が聞こえない)
   BGM_FADE_OUT: 1.5,    // 終了時にBGMをフェードアウトさせる秒数
   BGM_LEVEL_CAP: 12,    // BGMのレベル追従の上限(これ以上のレベルでは変化しない)
 
@@ -1099,6 +1142,17 @@ const CONFIG = {
   HEART_SPEED: 260,         // 打ち返したハートが UFO へ向かう速さ(px/s)
   HEART_PARTICLES: 12,      // ハートが UFO に届いたときの火花の数
 
+  /* スコアアタック: 隕石は落ちずに浮遊し、壊されるまで残る。上下2つの「席」に1体ずつ置き、
+     60秒間の撃破数を競う(規定数・着地の減点は無い) */
+  SCORE_METEORS: 2,          // 同時に浮かぶ隕石の数(= 席の数。FLOAT_SLOTS の長さ以下)
+  SCORE_RESPAWN: 0.35,       // 撃破から次の隕石が現れるまでの間(秒)
+  FLOAT_SLOTS: [0.30, 0.62], // 席の中心の高さ(フィールド高さに対する割合)。上下に分けて重ならないようにする
+  FLOAT_BOB_X: 14,           // 浮遊の横揺れ振幅(px)
+  FLOAT_BOB_Y: 8,            // 同・縦(px)
+  FLOAT_BOB_SPEED: 0.9,      // 揺れの速さ(rad/s)
+  FLOAT_POP: 0.25,           // 出現時に等倍になるまでの秒数
+  SCORE_BPM: 140,            // スコアアタックの BGM(専用曲)のテンポ。レベルでは変えない(ラストスパートだけ BGM_SPURT_BPM_ADD 上がる)
+
   /* SNS共有画像 */
   SHARE_W: 1080,
   SHARE_H: 1080,
@@ -1108,6 +1162,9 @@ const CONFIG = {
   SHARE_HEAD_TOP: 316, // 共有画像の見出しの上端(px)
   SHARE_RANK_UNIT: 6,  // 共有画像の RANK の1ドット(px)
   SHARE_RANK_TOP: 636, // 共有画像の RANK の上端(px)
+  SHARE_HERO_Y: 520,   // 共有画像の主役(クリアタイム)の中心の高さ(px)
+  SHARE_HERO_Y_SCORE: 580, // 同・スコアアタック(見出しが2段ぶん高いので下げる)
+  SHARE_CAPTION_Y_SCORE: 468, // 共有画像のスコアアタックの添え書き「60秒間の撃破数」の中心の高さ(px)
   SITE_URL: "flick-impact.com",
 };
 
@@ -1211,6 +1268,7 @@ const PIXEL_HEADINGS = {
   READY: { text: "READY", fill: ["--cyan", "--ember"] },
   GO: { text: "GO!", fill: ["--ember", "--pink"] },
   SECRET: { text: "THANK YOU", fill: ["--cyan", "--pink"] }, // 隠しステージのリザルト
+  SCORE: { text: "FINISH!", fill: ["--ember", "--cyan"] }, // スコアアタックの終了(時間切れが正常な終わり)
   SECRET_INTRO: { lines: ["FIRST", "CONTACT"], fill: ["--cyan", "--pink"] }, // 隠しステージの説明(2段)
   RANK_LABEL: "RANK",
 };
@@ -1623,6 +1681,28 @@ function levelLabel(level) {
   return level <= LEVELS.length ? LEVELS[level - 1].label : "全字種・スピードアップ";
 }
 
+/* ゲームモード。challenge = 60秒以内に規定数を撃破(成績はクリアタイム)、
+   score = スコアアタック(浮遊する隕石を60秒間にいくつ壊せるか)。隠しステージは challenge の派生(game.secret) */
+const MODE = { CHALLENGE: "challenge", SCORE: "score" };
+/* スコアアタックの10段階。語彙は base のチャレンジのレベルのプールをそのまま借りる
+   (L4 で濁音・半濁音・小文字をまとめて解放し、L5 から単語。L10 = チャレンジ L11 = 2〜7字) */
+const SCORE_LEVELS = [
+  { base: 1, label: "あ・か・さ" },
+  { base: 2, label: "＋た・な・は" },
+  { base: 3, label: "＋ま・や・ら・わ" },
+  { base: 5, label: "濁音・半濁音・小文字" },
+  { base: 6, label: "全字種" },
+  { base: 7, label: "全字種" },
+  { base: 8, label: "全字種" },
+  { base: 9, label: "全字種" },
+  { base: 10, label: "全字種" },
+  { base: 11, label: "全字種" },
+];
+/* そのモードのレベルが語彙を引くチャレンジのレベル */
+function vocabLevel(mode, level) {
+  return mode === MODE.SCORE ? SCORE_LEVELS[level - 1].base : level;
+}
+
 /* そのレベルの読みの文字数 [最小, 最大]。LEVEL_LEN を超えたら末尾で固定 */
 function lenRange(level) {
   return CONFIG.LEVEL_LEN[Math.min(level, CONFIG.LEVEL_LEN.length) - 1];
@@ -1838,7 +1918,7 @@ function pickWord(pool) {
 }
 
 function spawnMeteor() {
-  const poolIdx = poolIndex(game.level);
+  const poolIdx = poolIndex(vocabLevel(game.mode, game.level));
   const word = pickWord(LEVEL_POOLS[poolIdx]);
   recentWords.push(word.reading);
   recentWords = recentWords.slice(-CONFIG.RECENT_WORDS);
@@ -1847,20 +1927,27 @@ function spawnMeteor() {
   const chars = [...word.reading].map((ch) => ({ ch, tokens: inputSeq(ch) }));
   const rx = Math.max((word.len * CHAR_ADVANCE) / 2 + 14, 40);
   const ry = CONFIG.METEOR_RY + word.len * 1.5;
-  const margin = rx + 8;
   const speedJitter = 1 + (Math.random() * 2 - 1) * CONFIG.FALL_SPEED_VAR;
   /* 隠しステージ: ふきだしは UFO の下から、隕石よりゆっくり降りる */
   const secret = game.secret;
+  /* スコアアタック: 落ちずに浮遊する。空いている席(上下)に置き、揺れのぶんも端から離す。
+     浮遊の中心 hx / 席 slot / 位相 phase を持ち、x・y は毎フレーム update() が計算する */
+  const float = isScore();
+  const margin = rx + 8 + (float ? CONFIG.FLOAT_BOB_X : 0);
+  const slot = float ? CONFIG.FLOAT_SLOTS.findIndex((_, i) => !meteors.some((m) => m.slot === i)) : undefined;
+  const hx = fieldW < margin * 2 ? fieldW / 2 : margin + Math.random() * (fieldW - margin * 2);
   meteors.push({
     word, chars,
     charIdx: 0,   // 何文字目まで消したか
     charProg: 0,  // 現在の文字に入力済みのトークン数
-    t: 0,         // 出現からの経過秒(ふきだしのポップインに使う)
-    x: margin + Math.random() * Math.max(fieldW - margin * 2, 1),
-    y: secret ? CONFIG.UFO_Y + CONFIG.UFO_W * 0.13 + ry + 12 : ry + 6, // 画面上部に全体が見える位置から落ち始める
+    t: 0,         // 出現からの経過秒(ふきだし・浮遊隕石のポップインに使う)
+    x: hx,
+    y: float ? fieldH * CONFIG.FLOAT_SLOTS[slot]
+      : secret ? CONFIG.UFO_Y + CONFIG.UFO_W * 0.13 + ry + 12 : ry + 6, // 画面上部に全体が見える位置から落ち始める
+    slot, hx, phase: Math.random() * Math.PI * 2,
 
     rx, ry,
-    speed: CONFIG.FALL_SPEED * speedScale(game.level) * speedJitter * (secret ? CONFIG.SECRET_SPEED : 1),
+    speed: float ? 0 : CONFIG.FALL_SPEED * speedScale(game.level) * speedJitter * (secret ? CONFIG.SECRET_SPEED : 1),
     rot: Math.random() * Math.PI * 2,
     rotSpeed: (Math.random() * 2 - 1) * 0.3,
     /* 岩の輪郭(半径ジッタ)と、ヒビ・クレーターの乱数は生成時に固定 */
@@ -2139,18 +2226,49 @@ const BGM = (() => {
     [84, "-", 88, "-", 91, "-"],
   ];
   const SECRET_BASS = [0, null, 7, null, 12, null]; // ベース(8分×6): 1拍目に根音、3拍目に5度→オクターブの跳ね
+
+  /* --- スコアアタックの曲: 通常曲と同じ明るさで、こちらは F メジャーの軽いシャッフル(跳ねる8分)。
+     F | Dm | Bb | C | F | Am7 | Gm | C7→F の8小節(ドゥーワップ進行に iii と ii を混ぜる)。テンポはレベルで変えない。
+     half は「小節の後半(3拍目から)の和音」。bounce のアレンジだけが見る --- */
+  const SCORE_CHORDS = [
+    { bass: 41, tones: [57, 60, 65] },     // F
+    { bass: 38, tones: [57, 62, 65] },     // Dm
+    { bass: 46, tones: [58, 62, 65] },     // Bb
+    { bass: 48, tones: [55, 60, 64] },     // C
+    { bass: 41, tones: [57, 60, 65] },     // F
+    { bass: 45, tones: [57, 60, 64, 67] }, // Am7
+    { bass: 43, tones: [58, 62, 67] },     // Gm
+    { bass: 48, tones: [58, 60, 64, 67], half: { bass: 41, tones: [57, 60, 65] } }, // C7 → 3拍目から F(1小節目と同じ伴奏でファを受ける)
+  ];
+  /* リード: 1小節=8分×8(スウィング)。8小節で1周。伸ばす音を多めに、8小節目はファで止めて次の周へ */
+  const SCORE_MELODY = [
+    [77, "-", 81, "-", 84, 81, 77, "-"],   // ファー ラー ド↑ ラ ファー
+    [76, "-", 79, "-", 84, 79, 76, "-"],   // ミー ソー ド↑ ソ ミー
+    [74, 77, 82, "-", 81, 79, 77, "-"],    // レ ファ シ♭ー ラ ソ ファー
+    [76, "-", 72, "-", 74, 76, 79, "-"],   // ミー ドー レ ミ ソー
+    [81, "-", 84, "-", 81, 79, 77, 74],    // ラー ド↑ー ラ ソ ファ レ
+    [76, "-", 79, "-", 84, 81, 79, 77],    // ミー ソー ド↑ ラ ソ ファ
+    [82, 84, 86, "-", 84, 82, 81, 79],     // シ♭ ド↑ レ↑ー ド↑ シ♭ ラ ソ
+    [79, "-", 76, "-", 77, "-", "-", null], // ソー ミー ファーー 休
+  ];
+  const SCORE_BASS = [0, 7, 12, 7, 0, 7, 12, 9]; // ベース(8分×8・スウィング): 根音→5度→オクターブ→5度と歩き、最後は6度で次へ
+  const SCORE_STAB_BEATS = [1, 3];               // 和音のバックビート(拍。0 始まり = 2・4拍)
   /* 曲とアレンジ。beats は1小節の拍数(8分音符は beats×2 個)。
      chip = 通常のチップチューン(4拍子)、waltz = 隠しステージ(3拍子。2・3拍で和音を刻み、
      8分の高いアルペジオ、キック+タンバリン+8分ハット、リードにビブラート) */
   const SONGS = {
     main: { chords: CHORDS, melody: MELODY, beats: 4, style: "chip" },
     secret: { chords: SECRET_CHORDS, melody: SECRET_MELODY, beats: 3, style: "waltz" },
+    score: { chords: SCORE_CHORDS, melody: SCORE_MELODY, beats: 4, style: "bounce" },
   };
-  const song = () => (game.secret ? SONGS.secret : SONGS.main);
-  /* アレンジごとの音作り(残響の量・リードの丸め方・リードのビブラート) */
+  const song = () => (game.secret ? SONGS.secret : isScore() ? SONGS.score : SONGS.main);
+  /* アレンジごとの音作り(残響の量・リードの丸め方・リードのビブラート・8分のスウィング)。
+     chip = 通常のチップチューン、waltz = 隠しステージ、bounce = スコアアタック(跳ねる8分と2・4拍のバックビート)。
+     swing は裏の8分を拍のどこに置くか(0.5 = 真ん中 = 跳ねない。0.67 で3連のシャッフル) */
   const STYLE = {
-    chip: { wet: 0.35, feedback: 0.28, leadLp: 5200, vibrato: 0, vibratoHz: 0 },
-    waltz: { wet: 0.3, feedback: 0.25, leadLp: 6000, vibrato: 0.004, vibratoHz: 6.5 }, // vibrato は周波数比
+    chip: { wet: 0.35, feedback: 0.28, leadLp: 5200, vibrato: 0, vibratoHz: 0, swing: 0.5 },
+    waltz: { wet: 0.3, feedback: 0.25, leadLp: 6000, vibrato: 0.004, vibratoHz: 6.5, swing: 0.5 }, // vibrato は周波数比
+    bounce: { wet: 0.32, feedback: 0.26, leadLp: 5400, vibrato: 0, vibratoHz: 0, swing: 0.62 },
   };
   const PULSE_DUTY = 0.25;  // リードのパルス幅(25% = 定番のチップ音)
   const LOOKAHEAD = 1.2;    // 何秒先まで発音を予約するか
@@ -2171,6 +2289,8 @@ const BGM = (() => {
      値は小節の境界でしか反映されないため急変しない */
   function mood() {
     if (game.secret) return { spb: 60 / CONFIG.SECRET_BPM, drive: 0 }; // 隠しステージは専用曲を一定テンポで
+    /* スコアアタックは専用曲を固定テンポで(レベルでは変えない)。ラストスパートの加速だけ通常と同じ */
+    if (isScore()) return { spb: 60 / (CONFIG.SCORE_BPM + (game.spurt ? CONFIG.BGM_SPURT_BPM_ADD : 0)), drive: 1 };
     const lv = Math.min(game.level, CONFIG.BGM_LEVEL_CAP) - 1;
     const bpm = CONFIG.BGM_BPM + lv * CONFIG.BGM_BPM_PER_LEVEL +
       (game.spurt ? CONFIG.BGM_SPURT_BPM_ADD : 0);
@@ -2328,13 +2448,17 @@ const BGM = (() => {
     /* 残響の長さをテンポに追従させる(付点8分) */
     delaySend.delayTime.setTargetAtTime(spb * 0.75, t0, 0.5);
 
+    /* 8分音符 i の時刻。スウィングするアレンジでは裏の8分を拍の後ろへずらす(t8(n8) は小節の終わり) */
+    const swing = STYLE[s.style].swing;
+    const t8 = (i) => t0 + Math.floor(i / 2) * spb + (i % 2) * spb * swing;
+
     /* リード: "-" が続くぶん音を伸ばす */
     for (let i = 0; i < n8; i++) {
       const n = mel[i];
       if (typeof n !== "number") continue;
       let len = 1;
       while (i + len < n8 && mel[i + len] === "-") len++;
-      leadNote(t0 + i * e8, midiHz(n), e8 * len - 0.02);
+      leadNote(t8(i), midiHz(n), t8(i + len) - t8(i) - 0.02);
     }
 
     const lp = ac.createBiquadFilter();
@@ -2362,6 +2486,37 @@ const BGM = (() => {
       if (isTurn) {
         noiseHit(t0 + spb * 2.5, 0.06, 1800, 0.1, "bandpass");
         noiseHit(t0 + spb * 2.75, 0.08, 1800, 0.1, "bandpass");
+      }
+      return spb * beats;
+    }
+
+    if (s.style === "bounce") {
+      /* スコアアタック(4拍子・軽いシャッフル): 8分で根音→5度→オクターブと歩くベース、小節頭の薄いパッド、
+         2・4拍の和音のバックビート。キックは1・3拍、スネアは2・4拍、ハットはスウィングした8分(裏を軽く)。
+         通常曲の16分のチップコードは使わず、跳ねるリズムで明るさを出す。折り返しはスネアの助走 */
+      lp.frequency.value = 3000;
+      /* 後半(3拍目から)で和音が変わる小節は half の和音で伴奏する */
+      const chordAt = (beat) => (chord.half && beat >= beats / 2 ? chord.half : chord);
+      for (let i = 0; i < n8; i++) {
+        bassNote(t8(i), midiHz(chordAt(i / 2).bass + SCORE_BASS[i]), (t8(i + 1) - t8(i)) * 0.9);
+      }
+      for (const tone of chord.tones) chordNote(t0, midiHz(tone), spb * 1.5, lp, "triangle", 0.028); // 小節頭のパッド
+      if (chord.half) {
+        for (const tone of chord.half.tones) chordNote(t0 + (beats / 2) * spb, midiHz(tone), spb * 1.5, lp, "triangle", 0.028); // 後半のパッド
+      }
+      for (const b of SCORE_STAB_BEATS) {
+        for (const tone of chordAt(b).tones) chordNote(t0 + b * spb, midiHz(tone), spb * 0.35, lp, "square", 0.026);
+      }
+      for (let b = 0; b < beats; b++) {
+        const t = t0 + b * spb;
+        if (b % 2 === 0) kick(t, 0.4);
+        else noiseHit(t, 0.1, 1800, 0.12, "bandpass");                 // スネア(2・4拍)
+        noiseHit(t, 0.04, 7000, 0.03, "highpass");                     // ハット(表)
+        noiseHit(t + spb * swing, 0.028, 7000, 0.04, "highpass");      // ハット(跳ねた裏)
+      }
+      if (isTurn) {
+        noiseHit(t0 + spb * (beats - 0.5), 0.07, 1800, 0.1, "bandpass");
+        noiseHit(t0 + spb * (beats - 0.25), 0.09, 1800, 0.1, "bandpass");
       }
       return spb * beats;
     }
@@ -2412,9 +2567,9 @@ const BGM = (() => {
     running = true;
     const t = ac.currentTime;
     bus.gain.setValueAtTime(0.0001, t);
-    bus.gain.exponentialRampToValueAtTime(CONFIG.BGM_VOLUME, t + 0.6);
+    bus.gain.exponentialRampToValueAtTime(CONFIG.BGM_VOLUME, t + CONFIG.BGM_FADE_IN);
     barIdx = 0;
-    nextBarTime = t + 0.05;
+    nextBarTime = t + CONFIG.BGM_FADE_IN; // 音量が上がりきってから1小節目(曲の頭の音を欠かさない)
     tick();
     timer = setInterval(tick, TICK_MS);
   }
@@ -2442,13 +2597,19 @@ const BGM = (() => {
    設定: 入力ガイド / ヒント / 効果音 / BGM / 開始レベル(localStorageに保存)
    ============================================================ */
 const SETTINGS_KEY = "juni.settings";
-const settings = { guide: true, hint: true, sfx: true, bgm: true, startLevel: 1, secretBests: {} };
+const settings = {
+  guide: true, hint: true, sfx: true, bgm: true,
+  startLevel: 1,            // チャレンジの開始レベル
+  secretBests: {},          // 隠しステージのレベルごとのベスト友好度
+  mode: MODE.CHALLENGE,     // タイトルで選んでいるモード
+  scoreLevel: 1,            // スコアアタックの開始レベル
+};
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)) ?? {});
 } catch {}
 delete settings.easy;     // 旧バージョンの設定は捨てる
 delete settings.practice;
-settings.secretBests = cleanSecretBests(settings.secretBests);
+cleanSettings(settings);
 
 /* 隠しステージのベスト友好度 { [レベル]: % } を型どおりに揃える(壊れた値は捨てる) */
 function cleanSecretBests(raw) {
@@ -2458,6 +2619,15 @@ function cleanSecretBests(raw) {
     if (/^[1-9]\d*$/.test(lv) && Number.isFinite(pct)) out[lv] = Math.max(0, Math.min(100, pct));
   }
   return out;
+}
+/* 設定のうち値の範囲が決まっているものを揃える(未知のモード・範囲外のレベルは既定に戻す)。
+   引数のオブジェクトをその場で直して返す */
+function cleanSettings(s) {
+  s.secretBests = cleanSecretBests(s.secretBests);
+  if (!Object.values(MODE).includes(s.mode)) s.mode = MODE.CHALLENGE;
+  const lv = Number(s.scoreLevel);
+  s.scoreLevel = Number.isInteger(lv) ? Math.min(Math.max(lv, 1), SCORE_LEVELS.length) : 1;
+  return s;
 }
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
@@ -2499,7 +2669,12 @@ const game = {
   cleared: false,
   paused: false,  // 一時停止・設定画面を開いている間
   secret: false,  // 隠しステージ(ファーストコンタクト)か。level はクリアしたレベルのまま
+  mode: MODE.CHALLENGE, // いま遊んでいるモード(隠しステージ中は challenge のまま)
+  bestScore: 0,   // スコアアタック: 開始時点のそのレベルのベスト撃破数(HUD のゲージの目標)
 };
+const isScore = () => game.mode === MODE.SCORE;
+/* タイトルで選んでいるモードの開始レベル */
+const activeLevel = () => (settings.mode === MODE.SCORE ? settings.scoreLevel : settings.startLevel);
 let floaters = []; // フィールド上に浮かぶ文字(撃破した語・COMBO・ラスト10秒・-1・隠しステージのハート)
 
 /* 隠しステージの友好度(%)。撃破数 / 規定数を 100 で頭打ち */
@@ -2523,6 +2698,12 @@ function updateHud() {
   hudComboEl.textContent = game.combo;
   hudLevelEl.textContent = game.secret ? "？" : `LV ${game.level}`;
   hudKillsLabelEl.textContent = game.secret ? "友好度" : "撃破";
+  if (isScore()) {
+    /* スコアアタック: 規定数は無い。ゲージはそのレベルのベスト撃破数に対する進み(初挑戦なら空のまま) */
+    hudKillsEl.textContent = game.destroyed;
+    hudProgressEl.style.width = `${game.bestScore ? Math.min(game.destroyed / game.bestScore, 1) * 100 : 0}%`;
+    return;
+  }
   hudKillsEl.textContent = game.secret ? `${secretPct()}%` : `${game.destroyed} / ${game.required}`;
   hudProgressEl.style.width = `${Math.min(game.destroyed / game.required, 1) * 100}%`;
 }
@@ -2644,6 +2825,10 @@ function onDestroy(meteor) {
     t: 0, life: 0.9, kind: "word",
   });
   bump(hudKillsEl, 1.2);
+  if (isScore()) {
+    spawnTimer = 0; // 次の隕石は SCORE_RESPAWN 秒おいて出す。終了は時間切れだけ
+    return;
+  }
   if (game.destroyed >= game.required) game.secret ? finishSecret() : finishGame(true);
 }
 
@@ -2681,6 +2866,27 @@ function saveRecords(r) {
 /* クリア済みの最高レベル(未クリアなら0) */
 function maxClearedLevel(records = loadRecords()) {
   return Object.keys(records).reduce((m, k) => Math.max(m, Number(k)), 0);
+}
+
+/* ---- スコアアタックの記録: レベルごとのベスト撃破数と、そのときのプレー結果。
+   juni.records とは別のキーに持つ(チャレンジの解放判定 maxClearedLevel に影響させない) ---- */
+const SCORES_KEY = "juni.scores";
+/* { [レベル]: rec } を型どおりに揃える(キーが数字でない・撃破数が数でないものは捨てる) */
+function cleanScores(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [lv, rec] of Object.entries(raw)) {
+    if (/^[1-9]\d*$/.test(lv) && rec && typeof rec === "object" && Number.isFinite(rec.score) && rec.score >= 0) out[lv] = rec;
+  }
+  return out;
+}
+function loadScores() {
+  try { return cleanScores(JSON.parse(localStorage.getItem(SCORES_KEY))); }
+  catch { return {}; }
+}
+function saveScores(r) {
+  try { localStorage.setItem(SCORES_KEY, JSON.stringify(r)); } catch {}
+  markLocalChange();
 }
 
 /* ============================================================
@@ -2740,16 +2946,23 @@ const Cloud = (() => {
 
   /* 手元の記録・設定を送信用にまとめる */
   function snapshot() {
-    return { records: loadRecords(), settings: { ...settings }, updatedAt: localUpdatedAt() };
+    return { records: loadRecords(), scores: loadScores(), settings: { ...settings }, updatedAt: localUpdatedAt() };
   }
-  function fingerprint(d) { return JSON.stringify({ r: d.records, s: d.settings }); }
+  function fingerprint(d) { return JSON.stringify({ r: d.records, c: d.scores, s: d.settings }); }
 
-  /* 統合: 記録はレベルごとにタイムが短いほう、設定は更新時刻が新しいほう(サーバー側と同じ規則) */
-  function mergeData(local, cloud) {
-    const records = { ...local.records };
-    for (const [lv, rec] of Object.entries(cloud.records ?? {})) {
-      if (!records[lv] || rec.time < records[lv].time) records[lv] = rec;
+  /* レベルごとのベストを統合する。better(mine, theirs) が真なら相手側を採る */
+  function mergeByLevel(mine, theirs, better) {
+    const out = { ...mine };
+    for (const [lv, rec] of Object.entries(theirs ?? {})) {
+      if (!out[lv] || better(out[lv], rec)) out[lv] = rec;
     }
+    return out;
+  }
+  /* 統合: 記録はレベルごとにタイムが短いほう、スコアアタックはレベルごとに撃破数が多いほう、
+     設定は更新時刻が新しいほう(サーバー側と同じ規則) */
+  function mergeData(local, cloud) {
+    const records = mergeByLevel(local.records, cloud.records, (a, b) => b.time < a.time);
+    const scores = mergeByLevel(cleanScores(local.scores), cleanScores(cloud.scores), (a, b) => b.score > a.score);
     const cloudNewer = (cloud.updatedAt ?? 0) > local.updatedAt;
     const merged = cloudNewer ? { ...local.settings, ...cloud.settings } : { ...local.settings };
     /* 隠しステージのベスト友好度は記録と同じ扱い: 新しいほうではなく、レベルごとに高いほう */
@@ -2758,8 +2971,10 @@ const Cloud = (() => {
       bests[lv] = Math.max(bests[lv] ?? 0, pct);
     }
     merged.secretBests = bests;
+    cleanSettings(merged); // 相手側の mode / scoreLevel が壊れていても既定に戻す
     return {
       records,
+      scores,
       settings: merged,
       updatedAt: Math.max(local.updatedAt, cloud.updatedAt ?? 0),
     };
@@ -2770,6 +2985,7 @@ const Cloud = (() => {
     applyingCloud = true;
     try {
       saveRecords(data.records);
+      if (data.scores) saveScores(cleanScores(data.scores)); // scores を知らない古いサーバーの応答で手元を消さない
       if (!game.started) {
         Object.assign(settings, data.settings);
         saveSettings();
@@ -2916,13 +3132,16 @@ const Migrate = (() => {
 
   /* 送る中身。長くなりすぎるときは行別・方向別の詳細を落として、タイムだけでも渡す */
   function pack() {
-    const data = { records: loadRecords(), settings: { ...settings }, updatedAt: localUpdatedAt() };
+    const data = { records: loadRecords(), scores: loadScores(), settings: { ...settings }, updatedAt: localUpdatedAt() };
     const full = encode(JSON.stringify(data));
     if (full.length <= MAX_HASH) return full;
     const slim = Object.fromEntries(Object.entries(data.records).map(([lv, r]) => [lv, {
       level: r.level, time: r.time, maxCombo: r.maxCombo, destroyed: r.destroyed, required: r.required,
     }]));
-    return encode(JSON.stringify({ ...data, records: slim }));
+    const slimScores = Object.fromEntries(Object.entries(data.scores).map(([lv, r]) => [lv, {
+      mode: r.mode, level: r.level, score: r.score, maxCombo: r.maxCombo,
+    }]));
+    return encode(JSON.stringify({ ...data, records: slim, scores: slimScores }));
   }
 
   /* 受け取ったものの検査。URL は誰でも作れるので、形の合わないものは黙って捨てる */
@@ -2935,13 +3154,14 @@ const Migrate = (() => {
       if (!Number.isFinite(rec.time) || rec.time <= 0) continue;
       records[lv] = rec;
     }
+    const scores = cleanScores(raw.scores);
     const incoming = {};
     for (const [k, def] of Object.entries(settings)) {          // 既知のキーだけ、型が合うものだけ
       const v = raw.settings?.[k];
       if (typeof v === typeof def) incoming[k] = v;
     }
-    if (!Object.keys(records).length && !Object.keys(incoming).length) return null;
-    return { records, settings: incoming, updatedAt: Number.isFinite(raw.updatedAt) ? raw.updatedAt : 0 };
+    if (!Object.keys(records).length && !Object.keys(scores).length && !Object.keys(incoming).length) return null;
+    return { records, scores, settings: incoming, updatedAt: Number.isFinite(raw.updatedAt) ? raw.updatedAt : 0 };
   }
 
   function show(lead, note, button = "") {
@@ -2964,7 +3184,7 @@ const Migrate = (() => {
       return true;
     }
     Cloud.absorb(data);
-    const n = Object.keys(data.records).length;
+    const n = Object.keys(data.records).length + Object.keys(data.scores).length;
     show(`記録を引き継ぎました(${n}レベル)`,
          "Googleでログインしておくと、次からは端末をまたいで同期されます");
     return true;
@@ -3026,25 +3246,31 @@ function renderResultStats(st, prev) {
   ].join("");
 }
 
-/* リザルト表示。mode: "clear"(今クリア) / "fail"(時間切れ) / "view"(記録の閲覧)
-   rec: { level, time, maxCombo, destroyed, required, rows, dirs }
+/* リザルト表示。mode: "clear"(今クリア) / "fail"(時間切れ) / "view"(記録の閲覧) /
+   "secret"(隠しステージ) / "score"(スコアアタックを今終えた) / "score-view"(スコアアタックの記録の閲覧)
+   rec: { level, time, maxCombo, destroyed, required, rows, dirs }(スコアアタックは time の代わりに score)
    opts: { prev(比較する前ベスト), isNewBest, best(表示するベスト記録) } */
 let currentResult = null; // 共有画像の対象
 function showResult(rec, mode, { prev = null, isNewBest = false, best = null } = {}) {
   currentResult = rec;
   const secret = mode === "secret";
+  const score = mode === "score" || mode === "score-view";
+  const viewing = mode === "view" || mode === "score-view";
   const cleared = mode !== "fail";
-  const head = secret ? PIXEL_HEADINGS.SECRET : cleared ? PIXEL_HEADINGS.CLEAR : PIXEL_HEADINGS.FAIL;
+  const head = score ? PIXEL_HEADINGS.SCORE : secret ? PIXEL_HEADINGS.SECRET : cleared ? PIXEL_HEADINGS.CLEAR : PIXEL_HEADINGS.FAIL;
   document.getElementById("go-title").innerHTML = buildPixelSvg([head.text], head.fill);
   document.getElementById("go-hero").classList.toggle("fail", !cleared);
-  document.getElementById("go-hero-label").textContent = secret ? "友好度" : cleared ? "クリアタイム" : "撃破 / 規定";
-  document.getElementById("go-main").innerHTML = secret
-    ? `${rec.pct}<small>%</small>`
-    : cleared
-      ? `${rec.time.toFixed(2)}<small>秒</small>`
-      : `${rec.destroyed}<small>/ ${rec.required}</small>`;
-  document.getElementById("go-rank-wrap").classList.toggle("hidden", !cleared || secret);
-  if (cleared && !secret) {
+  document.getElementById("go-hero-label").textContent = score ? "撃破数" : secret ? "友好度" : cleared ? "クリアタイム" : "撃破 / 規定";
+  document.getElementById("go-main").innerHTML = score
+    ? `${rec.score}<small>個</small>`
+    : secret
+      ? `${rec.pct}<small>%</small>`
+      : cleared
+        ? `${rec.time.toFixed(2)}<small>秒</small>`
+        : `${rec.destroyed}<small>/ ${rec.required}</small>`;
+  const ranked = cleared && !secret && !score; // ランクはチャレンジのクリアタイムにだけ付く
+  document.getElementById("go-rank-wrap").classList.toggle("hidden", !ranked);
+  if (ranked) {
     document.getElementById("go-rank-label").innerHTML = buildPixelSvg([PIXEL_HEADINGS.RANK_LABEL], "currentColor", "pixel rank-label");
     document.getElementById("go-rank").innerHTML = buildPixelSvg([rankFor(rec.time)], "currentColor", "pixel rank-letter");
   }
@@ -3056,20 +3282,22 @@ function showResult(rec, mode, { prev = null, isNewBest = false, best = null } =
   document.getElementById("go-level-row").classList.toggle("hidden", secret);
   document.getElementById("go-level").textContent = rec.level;
   document.getElementById("go-best-row").classList.toggle("hidden", !best);
-  document.getElementById("go-best-label").textContent = secret ? "ベスト友好度" : "ベストタイム";
-  if (best) document.getElementById("go-best").textContent = secret ? `${best.pct}%` : fmtTime(best.time);
+  document.getElementById("go-best-label").textContent = score ? "ベスト" : secret ? "ベスト友好度" : "ベストタイム";
+  if (best) document.getElementById("go-best").textContent = score ? `${best.score}個` : secret ? `${best.pct}%` : fmtTime(best.time);
   document.getElementById("go-combo").textContent = rec.maxCombo;
   renderResultStats(rec, prev);
-  /* 次のレベルへ(クリア・隠しステージ)の下に もう一度(閲覧以外)。時間切れだけは もう一度 が主ボタン */
-  document.getElementById("go-next").classList.toggle("hidden", !(mode === "clear" || secret));
+  /* 次のレベルへ(クリア・隠しステージ・最終レベル以外のスコアアタック)の下に もう一度(閲覧以外)。
+     次が無いとき(時間切れ・スコアアタックの L10)は もう一度 が主ボタン */
+  const showNext = mode === "clear" || secret || (mode === "score" && rec.level < SCORE_LEVELS.length);
+  document.getElementById("go-next").classList.toggle("hidden", !showNext);
   const retryEl = document.getElementById("go-retry");
-  retryEl.classList.toggle("hidden", mode === "view");
-  retryEl.classList.toggle("secondary", mode !== "fail");
+  retryEl.classList.toggle("hidden", viewing);
+  retryEl.classList.toggle("secondary", showNext);
   document.getElementById("go-share").classList.toggle("hidden", !cleared || secret);
   /* 隠しステージへの「?」: SECRET_EVERY の倍数のレベルをいまクリアしたときだけ */
   document.getElementById("go-secret").classList.toggle("hidden",
     !(mode === "clear" && rec.level % CONFIG.SECRET_EVERY === 0));
-  document.getElementById("go-close").textContent = mode === "view" ? "閉じる" : "タイトルへ";
+  document.getElementById("go-close").textContent = viewing ? "閉じる" : "タイトルへ";
   overlayEl.classList.remove("hidden");
 }
 
@@ -3144,6 +3372,38 @@ function finishSecret() {
   });
 }
 
+/* スコアアタックの終了: 時間切れだけ(失敗は無い)。撃破数がそのレベルのベストを超えたら juni.scores を更新する */
+function finishScore() {
+  game.over = true;
+  game.cleared = true;
+  hudTimeEl.classList.remove("warn");
+  BGM.stop();
+  const scores = loadScores();
+  const prev = scores[game.level] ?? null;
+  const rec = {
+    mode: MODE.SCORE,
+    level: game.level,
+    score: game.destroyed,
+    maxCombo: game.maxCombo,
+    rows: stats.rows,
+    dirs: stats.dirs,
+    t: Date.now(),
+  };
+  SFX.clear();
+  const isNewBest = !prev || rec.score > prev.score;
+  if (isNewBest) {
+    scores[game.level] = rec; // 記録はすぐ保存し、紙吹雪と音はリザルトと一緒に出す
+    saveScores(scores);
+  }
+  showFinish("SCORE", () => {
+    if (isNewBest) {
+      spawnConfetti(CONFIG.CONFETTI);
+      SFX.newRecord();
+    }
+    showResult(rec, "score", { prev, isNewBest, best: isNewBest ? rec : prev });
+  });
+}
+
 /* ---- スタート直後の READY → GO!: フィールド中央にドット文字を出し、終わってからゲームを動かす。
    終了時も同じ場所に CLEAR! / TIME UP / THANK YOU を出し、少し待ってからリザルトを開く ---- */
 const countdownEl = document.getElementById("countdown");
@@ -3190,15 +3450,20 @@ function updateCountdown(dt) {
 }
 
 /* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理)。READY → GO! のあと動き出す。
-   secret は隠しステージ: 語彙・出現間隔・規定数はそのレベルのまま、開始レベルの設定は変えない */
-function startLevel(level, { secret = false } = {}) {
+   mode はモード(既定はチャレンジ)。secret は隠しステージ: 語彙・出現間隔・規定数はそのレベルのまま、
+   モードはチャレンジ扱いで、開始レベルの設定は変えない */
+function startLevel(level, { secret = false, mode = MODE.CHALLENGE } = {}) {
+  if (secret) mode = MODE.CHALLENGE;
+  const score = mode === MODE.SCORE;
   if (!secret) {
-    settings.startLevel = level;
+    if (score) settings.scoreLevel = level;
+    else settings.startLevel = level;
     saveSettings();
   }
   Object.assign(game, {
     combo: 0, maxCombo: 0, destroyed: 0,
-    level, required: requiredKills(level),
+    level, mode, required: score ? 0 : requiredKills(level), // スコアアタックに規定数は無い
+    bestScore: score ? (loadScores()[level]?.score ?? 0) : 0,
     timeLeft: CONFIG.TIME_LIMIT, spurt: false,
     started: false, over: false, cleared: false, paused: false, secret,
   });
@@ -3222,11 +3487,15 @@ function startLevel(level, { secret = false } = {}) {
   updateTimer();
 }
 const startSecret = (level) => startLevel(level, { secret: true });
-/* 状態を全リセットしてタイトル画面に戻る */
+const startScore = (level) => startLevel(level, { mode: MODE.SCORE });
+/* 状態を全リセットしてタイトル画面に戻る(タイトルで選んでいるモード・レベルを背後の HUD に映す) */
 function goToTitle() {
+  const level = activeLevel();
+  const score = settings.mode === MODE.SCORE;
   Object.assign(game, {
     combo: 0, maxCombo: 0, destroyed: 0,
-    level: settings.startLevel, required: requiredKills(settings.startLevel),
+    level, mode: settings.mode, required: score ? 0 : requiredKills(level),
+    bestScore: score ? (loadScores()[level]?.score ?? 0) : 0,
     timeLeft: CONFIG.TIME_LIMIT, spurt: false,
     started: false, over: false, cleared: false, paused: false, secret: false,
   });
@@ -3249,11 +3518,11 @@ function goToTitle() {
 
 document.getElementById("go-next").addEventListener("click", () => {
   SFX.ensure();
-  startLevel(game.level + 1);
+  startLevel(game.level + 1, { mode: game.mode }); // 隠しステージからは次の通常レベルへ(mode はチャレンジのまま)
 });
 document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
-  game.secret ? startSecret(game.level) : startLevel(game.level); // 隠しステージは説明を挟まず再開
+  game.secret ? startSecret(game.level) : startLevel(game.level, { mode: game.mode }); // 隠しステージは説明を挟まず再開
 });
 /* 「?」→ 説明パネル → 「スタート」で、いまクリアしたレベルの語彙のまま隠しステージへ */
 const secretIntroEl = document.getElementById("secret-intro");
@@ -3285,49 +3554,75 @@ document.getElementById("go-close").addEventListener("click", () => {
 document.getElementById("hud-logo").innerHTML = buildLogoSvg();
 document.getElementById("start-title").innerHTML = buildLogoSvg();
 
-/* ---- スタート画面: 開始レベル選択 + ボタンで開始(この操作でオーディオも起動) ---- */
+/* ---- スタート画面: モード切替 + 開始レベル選択 + ボタンで開始(この操作でオーディオも起動) ---- */
 const startEl = document.getElementById("start");
+const modeSwitchEl = document.getElementById("mode-switch");
 const pickerEl = document.getElementById("level-picker");
 const levelDescEl = document.getElementById("level-desc");
 const startBestEl = document.getElementById("start-best");
+const bestLineEl = startEl.querySelector(".best-line");
 const btnRecordsEl = document.getElementById("btn-records");
 
+/* タイトルの中身を settings.mode に合わせて描く。
+   チャレンジ: 解放上限 = クリア済みの次まで(上限なし)、マスにはベストタイム。
+   スコアアタック: SCORE_LEVELS の全レベルを最初から選べ、マスにはベスト撃破数 */
 function renderLevelPicker() {
   const records = loadRecords();
-  const unlocked = maxClearedLevel(records) + 1; // クリア済みの次まで(上限なし)
-  settings.startLevel = Math.min(Math.max(settings.startLevel, 1), unlocked);
+  const scores = loadScores();
+  const score = settings.mode === MODE.SCORE;
+  const unlocked = score ? SCORE_LEVELS.length : maxClearedLevel(records) + 1;
+  if (score) settings.scoreLevel = Math.min(Math.max(settings.scoreLevel, 1), unlocked);
+  else settings.startLevel = Math.min(Math.max(settings.startLevel, 1), unlocked);
+  const current = activeLevel();
+  for (const b of modeSwitchEl.querySelectorAll(".mode-btn")) b.classList.toggle("active", b.dataset.mode === settings.mode);
+  document.getElementById("rules-challenge").classList.toggle("hidden", score);
+  document.getElementById("rules-score").classList.toggle("hidden", !score);
   pickerEl.innerHTML = "";
-  /* 最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
-  const shown = Math.max(CONFIG.START_LEVEL_SHOWN, unlocked);
+  /* チャレンジは最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
+  const shown = score ? SCORE_LEVELS.length : Math.max(CONFIG.START_LEVEL_SHOWN, unlocked);
   let activeEl = null;
   for (let lv = 1; lv <= shown; lv++) {
     const b = document.createElement("button");
-    b.className = "lv" + (lv > unlocked ? " locked" : "") + (lv === settings.startLevel ? " active" : "");
+    b.className = "lv" + (lv > unlocked ? " locked" : "") + (lv === current ? " active" : "");
     b.dataset.level = lv;
-    const best = records[lv];
-    b.innerHTML = `${lv}<small>${best ? best.time.toFixed(1) + "s" : ""}</small>`;
+    const best = score ? scores[lv] : records[lv];
+    const bestText = !best ? "" : score ? `${best.score}個` : best.time.toFixed(1) + "s";
+    b.innerHTML = `${lv}<small>${bestText}</small>`;
     if (lv > unlocked) b.disabled = true;
-    if (lv === settings.startLevel) activeEl = b;
+    if (lv === current) activeEl = b;
     pickerEl.appendChild(b);
   }
   activeEl?.scrollIntoView({ block: "nearest" }); // 選択中のレベルが枠外に隠れないように
-  const [lo, hi] = lenRange(settings.startLevel);
-  levelDescEl.textContent =
-    `${levelLabel(settings.startLevel)} ／ ${lo === hi ? lo : `${lo}〜${hi}`}文字 ／ 規定 ${requiredKills(settings.startLevel)}個`;
+  const [lo, hi] = lenRange(vocabLevel(settings.mode, current));
+  const lenText = `${lo === hi ? lo : `${lo}〜${hi}`}文字`;
+  levelDescEl.textContent = score
+    ? `${SCORE_LEVELS[current - 1].label} ／ ${lenText}`
+    : `${levelLabel(current)} ／ ${lenText} ／ 規定 ${requiredKills(current)}個`;
   const top = maxClearedLevel(records);
   startBestEl.textContent = top ? `LEVEL ${top}` : "—";
-  btnRecordsEl.disabled = top === 0;
-  /* タイトル待機中は背後のHUDと空色も選んだレベルに追従させる */
-  if (!game.started) {
-    game.level = settings.startLevel;
-    game.required = requiredKills(game.level);
+  bestLineEl.classList.toggle("hidden", score); // スコアアタックは各マスにベストが出るので行ごと消す
+  btnRecordsEl.disabled = top === 0 && Object.keys(scores).length === 0;
+  /* タイトル待機中は背後のHUDと空色も選んだモード・レベルに追従させる(READY → GO! の間は触らない) */
+  if (!game.started && !countdown) {
+    game.mode = settings.mode;
+    game.level = current;
+    game.required = score ? 0 : requiredKills(current);
+    game.bestScore = score ? (scores[current]?.score ?? 0) : 0;
     updateHud();
   }
 }
 pickerEl.addEventListener("click", (e) => {
   const b = e.target.closest(".lv");
   if (!b || b.disabled) return;
-  settings.startLevel = Number(b.dataset.level);
+  if (settings.mode === MODE.SCORE) settings.scoreLevel = Number(b.dataset.level);
+  else settings.startLevel = Number(b.dataset.level);
+  saveSettings();
+  renderLevelPicker();
+});
+modeSwitchEl.addEventListener("click", (e) => {
+  const b = e.target.closest(".mode-btn");
+  if (!b || b.dataset.mode === settings.mode) return;
+  settings.mode = b.dataset.mode;
   saveSettings();
   renderLevelPicker();
 });
@@ -3337,7 +3632,7 @@ updateTimer();
 
 document.getElementById("btn-start").addEventListener("click", () => {
   SFX.ensure();
-  startLevel(settings.startLevel);
+  startLevel(activeLevel(), { mode: settings.mode });
   startEl.classList.add("hidden");
 });
 
@@ -3354,9 +3649,19 @@ const recordsEl = document.getElementById("records");
 const recordsListEl = document.getElementById("records-list");
 function openRecords() {
   const records = loadRecords();
+  const scores = loadScores();
   const levels = Object.keys(records).map(Number).sort((a, b) => a - b);
-  document.getElementById("records-empty").classList.toggle("hidden", levels.length > 0);
+  const scoreLevels = Object.keys(scores).map(Number).sort((a, b) => a - b);
+  document.getElementById("records-empty").classList.toggle("hidden", levels.length + scoreLevels.length > 0);
   recordsListEl.innerHTML = "";
+  /* モードごとにまとめる(記録のあるモードだけ見出しを出す) */
+  const heading = (text) => {
+    const h = document.createElement("div");
+    h.className = "sec-title";
+    h.textContent = text;
+    recordsListEl.appendChild(h);
+  };
+  if (levels.length) heading("チャレンジ");
   for (const lv of levels) {
     const r = records[lv];
     const b = document.createElement("button");
@@ -3373,16 +3678,27 @@ function openRecords() {
       recordsListEl.appendChild(d);
     }
   }
+  /* スコアアタック: レベルごとのベスト撃破数(ランクは無い) */
+  if (scoreLevels.length) heading("スコアアタック");
+  for (const lv of scoreLevels) {
+    const b = document.createElement("button");
+    b.className = "rec";
+    b.dataset.level = lv;
+    b.dataset.mode = MODE.SCORE;
+    b.innerHTML = `<span class="rec-lv">LEVEL ${lv}</span><span class="rec-time">${scores[lv].score}個</span><span class="rec-rank"></span>`;
+    recordsListEl.appendChild(b);
+  }
   recordsEl.classList.remove("hidden");
 }
 btnRecordsEl.addEventListener("click", openRecords);
 recordsListEl.addEventListener("click", (e) => {
   const b = e.target.closest(".rec");
-  if (!b) return;
-  const rec = loadRecords()[b.dataset.level];
+  if (!b || !b.dataset.level) return; // 隠しステージの行(data-level 無し)は押しても何も出ない
+  const score = b.dataset.mode === MODE.SCORE;
+  const rec = (score ? loadScores() : loadRecords())[b.dataset.level];
   if (!rec) return;
   recordsEl.classList.add("hidden");
-  showResult(rec, "view", { best: rec });
+  showResult(rec, score ? "score-view" : "view", { best: rec });
 });
 document.getElementById("rc-close").addEventListener("click", () => recordsEl.classList.add("hidden"));
 
@@ -3417,23 +3733,31 @@ function buildShareImage(rec) {
   /* タイトル(ドット文字ロゴ) */
   drawPixelText(g, LOGO.LINES, W / 2, CONFIG.SHARE_LOGO_TOP, CONFIG.SHARE_LOGO_UNIT, PALETTE.SHARE_LOGO);
 
-  /* 見出し: LEVEL n CLEAR(ドット文字) */
-  drawPixelText(g, [`LEVEL ${rec.level}  CLEAR`], W / 2, CONFIG.SHARE_HEAD_TOP, CONFIG.SHARE_HEAD_UNIT, [PALETTE.SHARE_ACCENT]);
+  /* 見出し(ドット文字): チャレンジは LEVEL n CLEAR、スコアアタックは SCORE ATTACK / LEVEL n の2段 */
+  const score = rec.mode === MODE.SCORE;
+  drawPixelText(g, score ? ["SCORE ATTACK", `LEVEL ${rec.level}`] : [`LEVEL ${rec.level}  CLEAR`],
+    W / 2, CONFIG.SHARE_HEAD_TOP, CONFIG.SHARE_HEAD_UNIT, [PALETTE.SHARE_ACCENT]);
+  if (score) {
+    g.fillStyle = PALETTE.SHARE_DIM;
+    g.font = `600 30px ${FONT_U}`;
+    g.fillText("60秒間の撃破数", W / 2, CONFIG.SHARE_CAPTION_Y_SCORE);
+  }
 
-  /* クリアタイム(主役) */
+  /* 主役: クリアタイム(秒) / 撃破数(個) */
+  const heroY = score ? CONFIG.SHARE_HERO_Y_SCORE : CONFIG.SHARE_HERO_Y;
   g.fillStyle = PALETTE.SHARE_TEXT;
   g.font = `800 210px ${FONT_U}`;
-  const timeStr = rec.time.toFixed(2);
-  const tw = g.measureText(timeStr).width;
-  g.fillText(timeStr, W / 2 - 30, 520);
+  const heroStr = score ? String(rec.score) : rec.time.toFixed(2);
+  const tw = g.measureText(heroStr).width;
+  g.fillText(heroStr, W / 2 - 30, heroY);
   g.font = `700 54px ${FONT_U}`;
   g.fillStyle = PALETTE.SHARE_DIM;
   g.textAlign = "left";
-  g.fillText("秒", W / 2 - 30 + tw / 2 + 18, 560);
+  g.fillText(score ? "個" : "秒", W / 2 - 30 + tw / 2 + 18, heroY + 40);
   g.textAlign = "center";
 
-  /* ランク(ドット文字)・コンボ */
-  drawPixelText(g, [`${PIXEL_HEADINGS.RANK_LABEL} ${rankFor(rec.time)}`], W / 2, CONFIG.SHARE_RANK_TOP, CONFIG.SHARE_RANK_UNIT, [PALETTE.SHARE_RANK]);
+  /* ランク(ドット文字。チャレンジだけ)・コンボ */
+  if (!score) drawPixelText(g, [`${PIXEL_HEADINGS.RANK_LABEL} ${rankFor(rec.time)}`], W / 2, CONFIG.SHARE_RANK_TOP, CONFIG.SHARE_RANK_UNIT, [PALETTE.SHARE_RANK]);
   g.fillStyle = PALETTE.SHARE_DIM;
   g.font = `600 36px ${FONT_U}`;
   g.fillText(`最大コンボ ${rec.maxCombo}`, W / 2, 730);
@@ -3478,8 +3802,11 @@ async function shareResult() {
   const canvas = buildShareImage(rec);
   const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
   if (!blob) return;
-  const name = `flick-impact-level${rec.level}.png`;
-  const text = `FLICK IMPACT — LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
+  const score = rec.mode === MODE.SCORE;
+  const name = score ? `flick-impact-score-level${rec.level}.png` : `flick-impact-level${rec.level}.png`;
+  const text = score
+    ? `FLICK IMPACT — スコアアタック LEVEL ${rec.level} で ${rec.score}個撃破！ https://${CONFIG.SITE_URL}`
+    : `FLICK IMPACT — LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
   if (typeof File === "function" && navigator.canShare) {
     const file = new File([blob], name, { type: "image/png" });
     if (navigator.canShare({ files: [file] })) {
@@ -3581,28 +3908,46 @@ function update(dt) {
     if (game.spurt && sec !== prevSec && sec > 0) SFX.timeTick();
     if (game.timeLeft <= 0) {
       game.timeLeft = 0;
-      game.secret ? finishSecret() : finishGame(false);
+      isScore() ? finishScore() : game.secret ? finishSecret() : finishGame(false);
     }
 
     spawnTimer += dt;
-    const interval = spawnIntervalFor(game.level);
-    /* 場が薄ければ間隔を待たずに補充する(1分間、手持ち無沙汰を作らない) */
-    const short = meteors.length < CONFIG.METEOR_MIN && spawnTimer >= CONFIG.SPAWN_MIN_GAP;
-    if (!game.over && (meteors.length === 0 || short ||
-        (spawnTimer >= interval && meteors.length < CONFIG.METEOR_MAX))) {
-      spawnTimer = 0;
-      spawnMeteor();
+    if (isScore()) {
+      /* スコアアタック: 席が空いていれば補充する(最初の1体は即、以後は SCORE_RESPAWN 秒おいて) */
+      if (!game.over && meteors.length < CONFIG.SCORE_METEORS &&
+          (meteors.length === 0 || spawnTimer >= CONFIG.SCORE_RESPAWN)) {
+        spawnTimer = 0;
+        spawnMeteor();
+      }
+    } else {
+      const interval = spawnIntervalFor(game.level);
+      /* 場が薄ければ間隔を待たずに補充する(1分間、手持ち無沙汰を作らない) */
+      const short = meteors.length < CONFIG.METEOR_MIN && spawnTimer >= CONFIG.SPAWN_MIN_GAP;
+      if (!game.over && (meteors.length === 0 || short ||
+          (spawnTimer >= interval && meteors.length < CONFIG.METEOR_MAX))) {
+        spawnTimer = 0;
+        spawnMeteor();
+      }
     }
     for (const m of meteors) {
       m.t += dt;
-      m.y += m.speed * dt;
+      if (m.slot !== undefined) {
+        /* 浮遊: 席の中心のまわりを漂う(席の高さは毎フレーム fieldH から取り、リサイズに追従する) */
+        const w = m.t * CONFIG.FLOAT_BOB_SPEED;
+        m.x = m.hx + Math.sin(w + m.phase) * CONFIG.FLOAT_BOB_X;
+        m.y = fieldH * CONFIG.FLOAT_SLOTS[m.slot] + Math.sin(w * 1.3 + m.phase * 2) * CONFIG.FLOAT_BOB_Y;
+      } else {
+        m.y += m.speed * dt;
+      }
       m.rot += m.rotSpeed * dt;
     }
-    const landed = meteors.filter((m) => m.y + m.ry >= fieldH);
-    if (landed.length) {
-      meteors = meteors.filter((m) => m.y + m.ry < fieldH);
-      if (landed.includes(lockedTarget)) lockedTarget = null;
-      for (const m of landed) onLanded(m);
+    if (!isScore()) { // 浮遊する隕石は着地しない
+      const landed = meteors.filter((m) => m.y + m.ry >= fieldH);
+      if (landed.length) {
+        meteors = meteors.filter((m) => m.y + m.ry < fieldH);
+        if (landed.includes(lockedTarget)) lockedTarget = null;
+        for (const m of landed) onLanded(m);
+      }
     }
   }
   for (const p of particles) {
@@ -3656,6 +4001,11 @@ function update(dt) {
 function drawMeteor(m) {
   ctx.save();
   ctx.translate(m.x, m.y);
+  if (m.slot !== undefined) {
+    /* 浮遊隕石(スコアアタック)は出現時に膨らんで等倍になる */
+    const pop = Math.max(0.01, Math.min(1, m.t / CONFIG.FLOAT_POP));
+    ctx.scale(pop, pop);
+  }
 
   /* 岩体: ジッタ付き楕円 + 大気圏で燃える縁 */
   ctx.save();
@@ -4153,8 +4503,8 @@ function draw() {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したら撃破数が1戻る(隠しステージには無い) */
-  if (!game.secret) {
+  /* 危険ライン: 隕石がここ(=キーパッド上端)に達したら撃破数が1戻る(隠しステージと、落ちてこないスコアアタックには無い) */
+  if (!game.secret && !isScore()) {
     ctx.fillStyle = `rgba(${PALETTE.DANGER_RGB}, ${0.35 + dangerFlash * 0.65})`;
     const lh = CONFIG.DANGER_LINE_H + dangerFlash * 3;
     ctx.fillRect(0, fieldH - lh, fieldW, lh);

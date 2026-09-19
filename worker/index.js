@@ -4,13 +4,14 @@
    役割:
      1. 静的な index.html の配信(Workers Static Assets。dist/ は worker/build.mjs が作る)
      2. Google ログイン(OAuth 2.0 / OpenID Connect の Authorization Code フロー)
-     3. プレイデータ(記録・設定)の保存 API(Workers KV。ユーザーごとに1キー)
+     3. プレイデータ(記録・スコアアタックの記録・設定)の保存 API(Workers KV。ユーザーごとに1キー)
 
    設計:
      - HTML 側は外部スクリプトを読まない。ログインは /auth/google/start への画面遷移だけで、
        Google とのトークン交換・検証はこの Worker がサーバー側で行う
      - セッションは HMAC 署名付きの HttpOnly Cookie(サーバー側に状態を持たない)
-     - 記録の統合は「レベルごとにタイムが短いほうを残す」。設定は更新時刻が新しいほうを採用
+     - 記録の統合は「レベルごとにタイムが短いほうを残す」、スコアアタックの記録(scores)は
+       「レベルごとに撃破数が多いほうを残す」。設定は更新時刻が新しいほうを採用
      - 外部依存なし(npm パッケージ不使用)。設定値は下の SETTINGS、秘密情報は wrangler secret
 
    バインディング / 変数(wrangler.toml):
@@ -209,21 +210,33 @@ function sanitizeData(body) {
     if (!levelKey.test(lv) || !rec || typeof rec !== "object" || !Number.isFinite(rec.time)) continue;
     records[lv] = rec;
   }
+  /* スコアアタックの記録: 撃破数 score が 0 以上の数のものだけ */
+  const scores = {};
+  for (const [lv, rec] of Object.entries(body.scores ?? {})) {
+    if (!levelKey.test(lv) || !rec || typeof rec !== "object" || !Number.isFinite(rec.score) || rec.score < 0) continue;
+    scores[lv] = rec;
+  }
   const settings = body.settings && typeof body.settings === "object" && !Array.isArray(body.settings) ? body.settings : {};
   const updatedAt = Number.isFinite(body.updatedAt) ? body.updatedAt : Date.now();
-  return { records, settings, updatedAt };
+  return { records, scores, settings, updatedAt };
 }
 
-/* 統合: 記録はレベルごとにタイムが短いほう、設定は updatedAt が新しいほう */
+/* 統合: 記録はレベルごとにタイムが短いほう、スコアアタックの記録はレベルごとに撃破数が多いほう、
+   設定は updatedAt が新しいほう。scores を送ってこない古いクライアントからの保存でもサーバー側の scores は残す */
 function mergeData(current, incoming) {
   if (!current) return incoming;
   const records = { ...current.records };
   for (const [lv, rec] of Object.entries(incoming.records)) {
     if (!records[lv] || rec.time < records[lv].time) records[lv] = rec;
   }
+  const scores = { ...(current.scores ?? {}) };
+  for (const [lv, rec] of Object.entries(incoming.scores ?? {})) {
+    if (!scores[lv] || rec.score > scores[lv].score) scores[lv] = rec;
+  }
   const newer = incoming.updatedAt >= (current.updatedAt ?? 0);
   return {
     records,
+    scores,
     settings: newer ? incoming.settings : current.settings,
     updatedAt: newer ? incoming.updatedAt : current.updatedAt,
   };

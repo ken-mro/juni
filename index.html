@@ -1070,10 +1070,12 @@ const CONFIG = {
   HIT_PARTICLES: 8,     // 1文字消したときの破片の数
   BOOM_PARTICLES: 26,   // 破壊時の破片の数
   PARTICLE_GRAVITY: 120,// 破片に掛かる重力(px/秒²)
-  SMALL_BADGE_FONT: 10, // 小文字だけの隕石に付ける「小」バッジの文字サイズ(px)。1文字だと大小の比較相手が無いため
+  SMALL_BADGE_FONT: 10, // 文字に添える小さなバッジ(「小」・残り回数「×2」)の文字サイズ(px)
   SMALL_BADGE_DX: 15,   // バッジ中心の位置(文字の中心からの右方向 px)
   SMALL_BADGE_DY: -13,  // 同・上方向(px)
   SMALL_BADGE_PAD: 3,   // バッジの角丸枠の余白(px)
+  MARK_DX: 13,          // 途中入力で重ねる記号(゛ ゜)の位置(文字の中心からの右方向 px)。全角の゛゜は字の左上に描かれる字形なので右へずらして濁点の位置に合わせる
+  MARK_DY: 0,           // 同・下方向(px)
   METEOR_GLOW_BLUR: 18, // 隕石の縁の燃えるにじみ(px)
   LOCK_GLOW_BLUR: 24,   // ロック中の隕石のにじみ(少し強く光る)
   SHAKE_AMP: 6,         // 隕石着地時の画面揺れの振幅(px)
@@ -1196,6 +1198,7 @@ const PALETTE = {
   CRACK: "rgba(255, 217, 61, 0.85)",
   CHAR_NEXT: "#ffd93d",
   CHAR_REST: "#d6d5ff",
+  CHAR_TYPED: "rgba(214, 213, 255, 0.4)", // 濁点・半濁点・小文字の途中: 入力済みの部分(いまの状態の字)を暗く
   CHAR_OUTLINE: "rgba(18, 12, 60, 0.85)",
   SMALL_BADGE_BG: "#ff6fb5",   // 「小」バッジ(隕石の岩・ふきだしの白地の両方で読める色)
   SMALL_BADGE_TEXT: "#1b1252",
@@ -1239,6 +1242,7 @@ const PALETTE = {
   BUBBLE_GLOW: "rgba(255, 255, 255, 0.35)",
   BUBBLE_CHAR_NEXT: "#d4348a",   // ふきだしの中の次に打つ文字(白地なので濃い色)
   BUBBLE_CHAR_REST: "#6a5fd6",
+  BUBBLE_CHAR_TYPED: "rgba(106, 95, 214, 0.4)",
   BUBBLE_CHAR_OUTLINE: "rgba(255, 255, 255, 0.9)",
   FLOAT_HEART: "#ff6fb5",
   FLOAT_UNHEARD: "#d6d5ff",
@@ -1954,13 +1958,6 @@ function spawnMeteor() {
     shape: Array.from({ length: 11 }, () => 0.82 + Math.random() * 0.36),
     seeds: Array.from({ length: 8 }, () => Math.random()),
   });
-}
-
-/* いま消しかけの文字の表示形。か→(MOD)→が の途中経過を見せる */
-function displayChar(m, i) {
-  const ch = m.chars[i].ch;
-  if (i !== m.charIdx || m.charProg === 0) return ch;
-  return CHAR_CYCLE[ch].cycle[m.charProg - 1];
 }
 
 function expectedToken(m) {
@@ -4060,7 +4057,7 @@ function drawMeteor(m) {
   ctx.restore();
 
   drawLockBracket(m);
-  drawFallerText(m, PALETTE.CHAR_NEXT, PALETTE.CHAR_REST, PALETTE.CHAR_OUTLINE);
+  drawFallerText(m, PALETTE.CHAR_NEXT, PALETTE.CHAR_REST, PALETTE.CHAR_TYPED, PALETTE.CHAR_OUTLINE);
   ctx.restore();
 }
 
@@ -4086,40 +4083,66 @@ function drawLockBracket(m) {
 }
 
 /* 残りの読み: 次に打つ文字をハイライト、残りは淡く(隕石・ふきだし共用。原点は本体の中心)。
-   1文字だけの小文字(L5 のかな単体)は「や」と「ゃ」の見分けがつかないので「小」バッジを添える
-   (打ちかけで「や」が表示されている間も、目標が小文字なら出したままにする) */
-function drawFallerText(m, nextColor, restColor, outlineColor) {
+   濁点・半濁点・小文字の途中(か→が の「か」まで打った状態など)は、清音(toBase)を暗く(typedColor)描き、
+   まだ打っていない記号だけを明るく重ねる: 濁点は ゛、半濁点は ゜、小文字は「小」バッジ
+   (ぱ の2回目のように途中の状態が ば でも、記号と重ならないよう清音のまま)。
+   小゛゜をあと2回押す必要がある(ぱ・づ の1回目)ときは「×2」も添える。
+   1文字だけの小文字(L5 のかな単体)は「や」と「ゃ」の見分けがつかないので、打ち始める前から「小」バッジを添える */
+function drawFallerText(m, nextColor, restColor, typedColor, outlineColor) {
   ctx.font = METEOR_FONT_STR;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const rest = m.word.len - m.charIdx;
   let tx = -((rest - 1) * CHAR_ADVANCE) / 2;
   for (let i = m.charIdx; i < m.word.len; i++) {
-    const ch = displayChar(m, i);
+    const target = m.chars[i].ch;
+    const partial = i === m.charIdx && m.charProg > 0; // 記号の入力待ち
+    const ch = partial ? toBase(target) : target;
     ctx.lineWidth = 3;
     ctx.strokeStyle = outlineColor;
     ctx.strokeText(ch, tx, 0);
-    ctx.fillStyle = i === m.charIdx ? nextColor : restColor;
+    ctx.fillStyle = partial ? typedColor : i === m.charIdx ? nextColor : restColor;
     ctx.fillText(ch, tx, 0);
-    if (m.word.len === 1 && m.chars[i].ch in SMALL_BASE) drawSmallBadge(tx, 0);
+    if (partial) drawPendingMark(target, tx, 0, nextColor, outlineColor, m.chars[i].tokens.length - m.charProg);
+    else if (m.word.len === 1 && target in SMALL_BASE) drawBadge(tx, 0, "小");
     tx += CHAR_ADVANCE;
   }
 }
 
-/* 「小」バッジ: 文字の右上に小さな角丸のタグ。ctx.font は呼び出し側の値に戻す */
-function drawSmallBadge(cx, cy) {
+/* 途中入力の「残り」の表示: 目標の字 target に足りない記号を、暗くした字の上に明るく重ねる。
+   remaining は小゛゜をあと何回押すか(2以上ならバッジで示す) */
+function drawPendingMark(target, cx, cy, color, outlineColor, remaining) {
+  if (target in SMALL_BASE) {
+    drawBadge(cx, cy, "小");
+  } else {
+    /* 全角の ゛ ゜ を MARK_DX/DY だけずらして重ね、その字の濁点・半濁点の位置に見せる */
+    const mark = target in HANDAKUTEN_BASE ? "゜" : "゛";
+    const x = cx + CONFIG.MARK_DX;
+    const y = cy + CONFIG.MARK_DY;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = outlineColor;
+    ctx.strokeText(mark, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(mark, x, y);
+  }
+  if (remaining >= 2) drawBadge(cx, cy, `×${remaining}`);
+}
+
+/* 文字の右上に小さな角丸のタグ(「小」・「×2」)。ctx.font は呼び出し側の値に戻す */
+function drawBadge(cx, cy, text) {
   const font = ctx.font;
   const size = CONFIG.SMALL_BADGE_FONT;
   const pad = CONFIG.SMALL_BADGE_PAD;
   const x = cx + CONFIG.SMALL_BADGE_DX;
   const y = cy + CONFIG.SMALL_BADGE_DY;
   ctx.font = `bold ${size}px "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif`;
+  const w = Math.max(size, ctx.measureText(text).width);
   ctx.fillStyle = PALETTE.SMALL_BADGE_BG;
   ctx.beginPath();
-  ctx.roundRect(x - size / 2 - pad, y - size / 2 - pad, size + pad * 2, size + pad * 2, pad + 1);
+  ctx.roundRect(x - w / 2 - pad, y - size / 2 - pad, w + pad * 2, size + pad * 2, pad + 1);
   ctx.fill();
   ctx.fillStyle = PALETTE.SMALL_BADGE_TEXT;
-  ctx.fillText("小", x, y + 0.5);
+  ctx.fillText(text, x, y + 0.5);
   ctx.font = font;
 }
 
@@ -4160,7 +4183,7 @@ function drawBubble(m) {
   ctx.lineWidth = locked ? 2 : 1.5;
   ctx.stroke();
   drawLockBracket(m);
-  drawFallerText(m, PALETTE.BUBBLE_CHAR_NEXT, PALETTE.BUBBLE_CHAR_REST, PALETTE.BUBBLE_CHAR_OUTLINE);
+  drawFallerText(m, PALETTE.BUBBLE_CHAR_NEXT, PALETTE.BUBBLE_CHAR_REST, PALETTE.BUBBLE_CHAR_TYPED, PALETTE.BUBBLE_CHAR_OUTLINE);
   ctx.restore();
 }
 

@@ -141,7 +141,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
   <h3>2-2. プレイデータ</h3>
   <p>ログイン中は、次のプレイデータが運営者のサーバーに保存されます(ログインしていない場合はユーザーの端末内にのみ保存されます)。</p>
   <ul>
-    <li>チャレンジのレベルごとのベスト記録: クリアタイム、最大コンボ、撃破数と規定数、キーの行別・フリック方向別の正答数と誤答数、達成日時</li>
+    <li>タイムアタックのレベルごとのベスト記録: クリアタイム、最大コンボ、撃破数と規定数、キーの行別・フリック方向別の正答数と誤答数、達成日時</li>
     <li>スコアアタックのレベルごとのベスト記録: 撃破数、最大コンボ、キーの行別・フリック方向別の正答数と誤答数、達成日時</li>
     <li>設定: 入力ガイド、次のキーのヒント、効果音、BGM の各オン・オフ、選んでいるモード、モードごとの開始レベル、隠しステージのレベルごとのベスト友好度</li>
     <li>上記を最後に更新した日時</li>
@@ -179,7 +179,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
   <h3>4-2. localStorage</h3>
   <p>本サービスは、ログインの有無にかかわらず、ブラウザの localStorage に記録と設定を保存します。これらの情報はユーザーの端末内にとどまり、ログインしない限り運営者のサーバーには送信されません。</p>
   <ul>
-    <li><code>juni.records</code> — チャレンジのレベルごとのベスト記録</li>
+    <li><code>juni.records</code> — タイムアタックのレベルごとのベスト記録</li>
     <li><code>juni.scores</code> — スコアアタックのレベルごとのベスト記録</li>
     <li><code>juni.settings</code> — 設定</li>
     <li><code>juni.sync</code> — 記録・設定を最後に変更した日時</li>

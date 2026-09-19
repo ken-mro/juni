@@ -21,7 +21,7 @@
   --lv-h: 44px;               /* 開始レベル選択の1マスの高さ(番号+ベストタイムの2行) */
   --lv-gap: 6px;              /* 開始レベル選択のマス間の隙間 */
   --lv-rows: 2;               /* 開始レベル選択の表示段数(10個=2段。超えたぶんはスクロール) */
-  --mode-h: 36px;             /* タイトルのモード切替(チャレンジ / スコアアタック)のボタンの高さ */
+  --mode-h: 36px;             /* タイトルのモード切替(タイムアタック / スコアアタック)のボタンの高さ */
   --logo-hud-h: 28px;         /* HUDのロゴ(2段のドット文字)の高さ */
   --logo-hud-h-narrow: 22px;  /* 狭い端末でのHUDロゴの高さ */
   --logo-title-w: min(100%, 250px); /* タイトル画面のロゴの幅 */
@@ -446,7 +446,7 @@ i.down { color: var(--danger); }
 }
 .dircross .blank { visibility: hidden; }
 
-/* ---- モード切替(スタート画面): チャレンジ / スコアアタック。選択中はレベル選択の active と同じ塗り ---- */
+/* ---- モード切替(スタート画面): タイムアタック / スコアアタック。選択中はレベル選択の active と同じ塗り ---- */
 .mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -659,7 +659,7 @@ i.down { color: var(--danger); }
 .rec .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ember); }
 .rec .rec-rank { color: var(--cyan); }
 .rec .rec-rank .pixel { height: var(--pixel-rec-rank-h); }
-/* モードごとの見出し(チャレンジ / スコアアタック)。flex の gap があるので上の余白は控えめに */
+/* モードごとの見出し(タイムアタック / スコアアタック)。flex の gap があるので上の余白は控えめに */
 .records-list .sec-title { margin-top: 6px; }
 .records-list .sec-title:first-child { margin-top: 0; }
 /* 隠しステージのベスト友好度(押せない) */
@@ -930,13 +930,13 @@ i.down { color: var(--danger); }
     <p class="start-copy">フリック入力で地球を守れ</p>
     <!-- モード切替。選択は settings.mode に保存し、あそびかた・開始レベル選択がモードに従う -->
     <div id="mode-switch" class="mode-switch" aria-label="モード">
-      <button class="mode-btn" data-mode="challenge">チャレンジ</button>
+      <button class="mode-btn" data-mode="challenge">タイムアタック</button>
       <button class="mode-btn" data-mode="score">スコアアタック</button>
     </div>
     <div class="sec-title">あそびかた</div>
     <ul id="rules-challenge" class="start-rules">
       <li>隕石のことばをフリックで撃つ</li>
-      <li>60秒以内に規定数を撃破でクリア</li>
+      <li>60秒以内に規定数を撃破。クリアタイムを競う</li>
       <li>落とすと撃破数が1もどる</li>
     </ul>
     <ul id="rules-score" class="start-rules hidden">
@@ -1147,7 +1147,7 @@ const CONFIG = {
   /* スコアアタック: 隕石は落ちずに浮遊し、壊されるまで残る。上下2つの「席」に1体ずつ置き、
      60秒間の撃破数を競う(規定数・着地の減点は無い) */
   SCORE_METEORS: 2,          // 同時に浮かぶ隕石の数(= 席の数。FLOAT_SLOTS の長さ以下)
-  SCORE_RESPAWN: 0.35,       // 撃破から次の隕石が現れるまでの間(秒)
+  SCORE_RESPAWN: 0,          // 撃破から次の隕石が現れるまでの間(秒)。0 = 撃破の直後(次のフレーム)に出す。間を置きたければ増やす
   FLOAT_SLOTS: [0.30, 0.62], // 席の中心の高さ(フィールド高さに対する割合)。上下に分けて重ならないようにする
   FLOAT_BOB_X: 14,           // 浮遊の横揺れ振幅(px)
   FLOAT_BOB_Y: 8,            // 同・縦(px)
@@ -1688,8 +1688,8 @@ function levelLabel(level) {
 /* ゲームモード。challenge = 60秒以内に規定数を撃破(成績はクリアタイム)、
    score = スコアアタック(浮遊する隕石を60秒間にいくつ壊せるか)。隠しステージは challenge の派生(game.secret) */
 const MODE = { CHALLENGE: "challenge", SCORE: "score" };
-/* スコアアタックの10段階。語彙は base のチャレンジのレベルのプールをそのまま借りる
-   (L4 で濁音・半濁音・小文字をまとめて解放し、L5 から単語。L10 = チャレンジ L11 = 2〜7字) */
+/* スコアアタックの10段階。語彙は base のタイムアタックのレベルのプールをそのまま借りる
+   (L4 で濁音・半濁音・小文字をまとめて解放し、L5 から単語。L10 = タイムアタック L11 = 2〜7字) */
 const SCORE_LEVELS = [
   { base: 1, label: "あ・か・さ" },
   { base: 2, label: "＋た・な・は" },
@@ -1702,7 +1702,7 @@ const SCORE_LEVELS = [
   { base: 10, label: "全字種" },
   { base: 11, label: "全字種" },
 ];
-/* そのモードのレベルが語彙を引くチャレンジのレベル */
+/* そのモードのレベルが語彙を引くタイムアタックのレベル */
 function vocabLevel(mode, level) {
   return mode === MODE.SCORE ? SCORE_LEVELS[level - 1].base : level;
 }
@@ -2596,7 +2596,7 @@ const BGM = (() => {
 const SETTINGS_KEY = "juni.settings";
 const settings = {
   guide: true, hint: true, sfx: true, bgm: true,
-  startLevel: 1,            // チャレンジの開始レベル
+  startLevel: 1,            // タイムアタックの開始レベル
   secretBests: {},          // 隠しステージのレベルごとのベスト友好度
   mode: MODE.CHALLENGE,     // タイトルで選んでいるモード
   scoreLevel: 1,            // スコアアタックの開始レベル
@@ -2823,7 +2823,7 @@ function onDestroy(meteor) {
   });
   bump(hudKillsEl, 1.2);
   if (isScore()) {
-    spawnTimer = 0; // 次の隕石は SCORE_RESPAWN 秒おいて出す。終了は時間切れだけ
+    spawnTimer = 0; // 次の隕石は SCORE_RESPAWN 秒(既定 0 = 直後)で出す。終了は時間切れだけ
     return;
   }
   if (game.destroyed >= game.required) game.secret ? finishSecret() : finishGame(true);
@@ -2866,7 +2866,7 @@ function maxClearedLevel(records = loadRecords()) {
 }
 
 /* ---- スコアアタックの記録: レベルごとのベスト撃破数と、そのときのプレー結果。
-   juni.records とは別のキーに持つ(チャレンジの解放判定 maxClearedLevel に影響させない) ---- */
+   juni.records とは別のキーに持つ(タイムアタックの解放判定 maxClearedLevel に影響させない) ---- */
 const SCORES_KEY = "juni.scores";
 /* { [レベル]: rec } を型どおりに揃える(キーが数字でない・撃破数が数でないものは捨てる) */
 function cleanScores(raw) {
@@ -3265,7 +3265,7 @@ function showResult(rec, mode, { prev = null, isNewBest = false, best = null } =
       : cleared
         ? `${rec.time.toFixed(2)}<small>秒</small>`
         : `${rec.destroyed}<small>/ ${rec.required}</small>`;
-  const ranked = cleared && !secret && !score; // ランクはチャレンジのクリアタイムにだけ付く
+  const ranked = cleared && !secret && !score; // ランクはタイムアタックのクリアタイムにだけ付く
   document.getElementById("go-rank-wrap").classList.toggle("hidden", !ranked);
   if (ranked) {
     document.getElementById("go-rank-label").innerHTML = buildPixelSvg([PIXEL_HEADINGS.RANK_LABEL], "currentColor", "pixel rank-label");
@@ -3447,8 +3447,8 @@ function updateCountdown(dt) {
 }
 
 /* そのレベルで開始(リトライ・次のレベルへ・スタートの共通処理)。READY → GO! のあと動き出す。
-   mode はモード(既定はチャレンジ)。secret は隠しステージ: 語彙・出現間隔・規定数はそのレベルのまま、
-   モードはチャレンジ扱いで、開始レベルの設定は変えない */
+   mode はモード(既定はタイムアタック)。secret は隠しステージ: 語彙・出現間隔・規定数はそのレベルのまま、
+   モードはタイムアタック扱いで、開始レベルの設定は変えない */
 function startLevel(level, { secret = false, mode = MODE.CHALLENGE } = {}) {
   if (secret) mode = MODE.CHALLENGE;
   const score = mode === MODE.SCORE;
@@ -3515,7 +3515,7 @@ function goToTitle() {
 
 document.getElementById("go-next").addEventListener("click", () => {
   SFX.ensure();
-  startLevel(game.level + 1, { mode: game.mode }); // 隠しステージからは次の通常レベルへ(mode はチャレンジのまま)
+  startLevel(game.level + 1, { mode: game.mode }); // 隠しステージからは次の通常レベルへ(mode はタイムアタックのまま)
 });
 document.getElementById("go-retry").addEventListener("click", () => {
   SFX.ensure();
@@ -3561,7 +3561,7 @@ const bestLineEl = startEl.querySelector(".best-line");
 const btnRecordsEl = document.getElementById("btn-records");
 
 /* タイトルの中身を settings.mode に合わせて描く。
-   チャレンジ: 解放上限 = クリア済みの次まで(上限なし)、マスにはベストタイム。
+   タイムアタック: 解放上限 = クリア済みの次まで(上限なし)、マスにはベストタイム。
    スコアアタック: SCORE_LEVELS の全レベルを最初から選べ、マスにはベスト撃破数 */
 function renderLevelPicker() {
   const records = loadRecords();
@@ -3575,7 +3575,7 @@ function renderLevelPicker() {
   document.getElementById("rules-challenge").classList.toggle("hidden", score);
   document.getElementById("rules-score").classList.toggle("hidden", !score);
   pickerEl.innerHTML = "";
-  /* チャレンジは最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
+  /* タイムアタックは最低 START_LEVEL_SHOWN 個。解放が進めばそのぶん伸び、枠内をスクロールする */
   const shown = score ? SCORE_LEVELS.length : Math.max(CONFIG.START_LEVEL_SHOWN, unlocked);
   let activeEl = null;
   for (let lv = 1; lv <= shown; lv++) {
@@ -3658,7 +3658,7 @@ function openRecords() {
     h.textContent = text;
     recordsListEl.appendChild(h);
   };
-  if (levels.length) heading("チャレンジ");
+  if (levels.length) heading("タイムアタック");
   for (const lv of levels) {
     const r = records[lv];
     const b = document.createElement("button");
@@ -3730,7 +3730,7 @@ function buildShareImage(rec) {
   /* タイトル(ドット文字ロゴ) */
   drawPixelText(g, LOGO.LINES, W / 2, CONFIG.SHARE_LOGO_TOP, CONFIG.SHARE_LOGO_UNIT, PALETTE.SHARE_LOGO);
 
-  /* 見出し(ドット文字): チャレンジは LEVEL n CLEAR、スコアアタックは SCORE ATTACK / LEVEL n の2段 */
+  /* 見出し(ドット文字): タイムアタックは LEVEL n CLEAR、スコアアタックは SCORE ATTACK / LEVEL n の2段 */
   const score = rec.mode === MODE.SCORE;
   drawPixelText(g, score ? ["SCORE ATTACK", `LEVEL ${rec.level}`] : [`LEVEL ${rec.level}  CLEAR`],
     W / 2, CONFIG.SHARE_HEAD_TOP, CONFIG.SHARE_HEAD_UNIT, [PALETTE.SHARE_ACCENT]);
@@ -3753,7 +3753,7 @@ function buildShareImage(rec) {
   g.fillText(score ? "個" : "秒", W / 2 - 30 + tw / 2 + 18, heroY + 40);
   g.textAlign = "center";
 
-  /* ランク(ドット文字。チャレンジだけ)・コンボ */
+  /* ランク(ドット文字。タイムアタックだけ)・コンボ */
   if (!score) drawPixelText(g, [`${PIXEL_HEADINGS.RANK_LABEL} ${rankFor(rec.time)}`], W / 2, CONFIG.SHARE_RANK_TOP, CONFIG.SHARE_RANK_UNIT, [PALETTE.SHARE_RANK]);
   g.fillStyle = PALETTE.SHARE_DIM;
   g.font = `600 36px ${FONT_U}`;
@@ -3803,7 +3803,7 @@ async function shareResult() {
   const name = score ? `flick-impact-score-level${rec.level}.png` : `flick-impact-level${rec.level}.png`;
   const text = score
     ? `FLICK IMPACT — スコアアタック LEVEL ${rec.level} で ${rec.score}個撃破！ https://${CONFIG.SITE_URL}`
-    : `FLICK IMPACT — LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
+    : `FLICK IMPACT — タイムアタック LEVEL ${rec.level} を ${fmtTime(rec.time)} でクリア！ https://${CONFIG.SITE_URL}`;
   if (typeof File === "function" && navigator.canShare) {
     const file = new File([blob], name, { type: "image/png" });
     if (navigator.canShare({ files: [file] })) {
@@ -3910,7 +3910,7 @@ function update(dt) {
 
     spawnTimer += dt;
     if (isScore()) {
-      /* スコアアタック: 席が空いていれば補充する(最初の1体は即、以後は SCORE_RESPAWN 秒おいて) */
+      /* スコアアタック: 席が空いていれば補充する(撃破の直後から SCORE_RESPAWN 秒。既定 0 なので次のフレームで出る) */
       if (!game.over && meteors.length < CONFIG.SCORE_METEORS &&
           (meteors.length === 0 || spawnTimer >= CONFIG.SCORE_RESPAWN)) {
         spawnTimer = 0;

@@ -1,6 +1,6 @@
 # FLICK IMPACT
 
-フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。
+フリック入力で落下する「ことばの隕石」を破壊するスマホ向けタイピングゲーム。モードは、60秒以内に規定数を撃破してクリアタイムを競う**チャレンジ**と、浮遊する隕石を60秒間にいくつ壊せるかを競う**スコアアタック**の2つ。
 ゲーム本体は `index.html` 一枚（外部依存ゼロ）。仕様は [spec.md](spec.md)、開発の約束事は [CLAUDE.md](CLAUDE.md)。
 
 - 公開URL: **https://flick-impact.com**（Cloudflare Workers）
@@ -21,13 +21,13 @@
 
 ```
 [スマホ] index.html ──GET /api/me──▶ Worker ── ログイン状態(Cookie の署名検証)
-        ──GET/PUT /api/data──▶ Worker ──▶ KV  user:<Google の sub> = { records, settings, updatedAt }
+        ──GET/PUT /api/data──▶ Worker ──▶ KV  user:<Google の sub> = { records, scores, settings, updatedAt }
         ──/auth/google/start──▶ Google 同意画面 ──▶ /auth/google/callback ──▶ /（Cookie 発行）
 ```
 
 - HTML 側は Google のスクリプトを読み込まない。ログインは `/auth/google/start` への画面遷移だけで、コードとトークンの交換は Worker がサーバー側で行う（Authorization Code + PKCE）
 - セッションは HMAC 署名付きの HttpOnly Cookie（90日）。サーバー側にセッション表は持たない
-- 統合規則: 記録はレベルごとに**タイムが短いほう**、設定は**更新が新しいほう**。端末側・サーバー側の両方で同じ規則を適用するので、複数端末で同時に遊んでも記録は失われない
+- 統合規則: チャレンジの記録（`records`）はレベルごとに**タイムが短いほう**、スコアアタックの記録（`scores`）はレベルごとに**撃破数が多いほう**、設定は**更新が新しいほう**。端末側・サーバー側の両方で同じ規則を適用するので、複数端末で同時に遊んでも記録は失われない
 - 要求するスコープは `openid profile`（表示名のみ。メールアドレスは取得しない）
 
 ## 初回セットアップ
@@ -100,6 +100,7 @@ npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream 127.0.0.1:8787
 
 | キー | 内容 |
 | --- | --- |
-| `juni.records` | レベルごとのベスト記録 |
-| `juni.settings` | 設定（guide, hint, sfx, bgm, startLevel） |
+| `juni.records` | チャレンジのレベルごとのベスト記録（クリアタイム） |
+| `juni.scores` | スコアアタックのレベルごとのベスト記録（撃破数） |
+| `juni.settings` | 設定（guide, hint, sfx, bgm, startLevel, secretBests, mode, scoreLevel） |
 | `juni.sync` | `{ updatedAt }` 手元の記録・設定を最後に変えた時刻（設定の新旧比較に使う） |
